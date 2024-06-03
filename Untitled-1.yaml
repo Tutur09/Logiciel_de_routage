@@ -1,0 +1,53 @@
+<xarray.Dataset> Size: 131MB
+Dimensions:            (step: 169, latitude: 241, longitude: 401)
+Coordinates:
+    time               datetime64[ns] 8B 2024-05-02T18:00:00
+  * step               (step) timedelta64[ns] 1kB 00:00:00 ... 7 days 00:00:00
+    heightAboveGround  float64 8B 10.0
+  * latitude           (latitude) float64 2kB 43.0 43.02 43.05 ... 48.97 49.0
+  * longitude          (longitude) float64 3kB 0.0 350.0 350.0 ... 359.9 360.0
+    valid_time         (step) datetime64[ns] 1kB 2024-05-02T18:00:00 ... 2024...
+Data variables:
+    u10                (step, latitude, longitude) float32 65MB ...
+    v10                (step, latitude, longitude) float32 65MB ...
+Attributes:
+    GRIB_edition:            2
+    GRIB_centre:             consensus
+    GRIB_centreDescription:  Consensus
+    GRIB_subCentre:          0
+    Conventions:             CF-1.7
+    institution:             Consensus
+<xarray.DataArray 'time' ()> Size: 8B
+array('2024-05-02T18:00:00.000000000', dtype='datetime64[ns]')
+Coordinates:
+    time               datetime64[ns] 8B 2024-05-02T18:00:00
+    heightAboveGround  float64 8B 10.0
+Attributes:
+    long_name:      initial time of forecast
+    standard_name:  forecast_reference_time
+<xarray.Dataset> Size: 65MB
+Dimensions:     (step: 169, latitude: 241, longitude: 401)
+Coordinates:
+    time        datetime64[ns] 8B 2024-05-02T18:00:00
+  * step        (step) timedelta64[ns] 1kB 00:00:00 01:00:00 ... 7 days 00:00:00
+    surface     float64 8B 0.0
+  * latitude    (latitude) float64 2kB 43.0 43.02 43.05 ... 48.95 48.97 49.0
+  * longitude   (longitude) float64 3kB 0.0 350.0 350.0 ... 359.9 359.9 360.0
+    valid_time  (step) datetime64[ns] 1kB ...
+Data variables:
+    gust        (step, latitude, longitude) float32 65MB ...
+Attributes:
+    GRIB_edition:            2
+    GRIB_centre:             consensus
+    GRIB_centreDescription:  Consensus
+    GRIB_subCentre:          0
+    Conventions:             CF-1.7
+    institution:             Consensus
+<xarray.DataArray 'time' ()> Size: 8B
+array('2024-05-02T18:00:00.000000000', dtype='datetime64[ns]')
+Coordinates:
+    time     datetime64[ns] 8B 2024-05-02T18:00:00
+    surface  float64 8B 0.0
+Attributes:
+    long_name:      initial time of forecast
+    standard_name:  forecast_reference_time
