@@ -54,7 +54,6 @@ def concave_shape(points, a_min):
     a_min_radians = math.radians(a_min)
     
     # Call the repEnv function to compute the hull and display it
-    repEnv(points, a_min_radians)
 
     
 concave_shape(tab, 45)
