@@ -42,7 +42,6 @@ def projection(position, cap, distance):
     
     return (new_long, new_lat)
 
-
 def projection_vectorized(positions, caps, distances):
     # Earth radius in nautical miles
     R = 3440.0
@@ -78,28 +77,29 @@ def prochains_points(position, pol, d_vent, pas_temporel, pas_angle):
     for angle in chemin:
 
         v_bateau = recup_vitesse_fast(pol, d_vent - angle)
-        liste_points.append(projection(position, angle, v_bateau * pas_temporel))
+        liste_points.append((projection(position, angle, v_bateau * pas_temporel), position))
     return liste_points
 
 
 def prochains_points_liste(liste, v_vent, d_vent, pas_temporel, pas_angle):
     pol = polaire(v_vent)
     liste_rendu = []
-    for i in range(len(liste)):
-        point = liste[i]
+    for point in range(len(liste)):
         nouveaux_points = prochains_points(point, pol, d_vent, pas_temporel, pas_angle)
-        liste_rendu += nouveaux_points
+        liste_rendu += (nouveaux_points, point) #On rend un tuple pour connaitre le parent de ce point afin de les relier
     return liste_rendu
+
+
 
     
 def polaire(vitesse_vent):
     """_summary_
 
     Args:
-        vitesse_vent (float): prend en entrée la vitesse du vent
+        vitesse_vent (float): _description_
 
     Returns:
-        Array de float64: retourne la vitesse en fonction donné pour la vitesse de vent choisie
+        _type_: _description_
     """
     polaire = pd.read_csv('Sunfast3600.pol', delimiter=r'\s+', index_col=0)
     liste_vitesse = polaire.columns
@@ -118,16 +118,15 @@ def polaire(vitesse_vent):
     print('Erreur vitesse de vent')
     return None
         
-        
 def recup_vitesse(vitesse_vent, angle): #Renvoie la vitesse pour un angle et vent donné
     """_summary_
 
     Args:
-        vitesse_vent (float): vitesse de vent
-        angle (float): angle par rapport au vent
+        vitesse_vent (float): _description_
+        angle (float): _description_
 
     Returns:
-        float: retourne la vitesse pour un angle et un vent donné
+        _type_: _description_
     """
     pol = polaire(vitesse_vent)
     angle = abs(angle)
@@ -149,6 +148,7 @@ def recup_vitesse(vitesse_vent, angle): #Renvoie la vitesse pour un angle et ven
         i+=1
     print('Erreur angle')
     return None
+
 
 
 def recup_vitesse_fast(pol, angle): #Renvoie la vitesse pour un angle et vent donné
@@ -192,7 +192,6 @@ def plot_liste_points(liste_points, sous_liste = None, annotate = False):
     y.append(liste_points[0][1])
     plt.scatter(x,y)
     
-    
     if sous_liste !=None:
         x_sl = [ x[i] for i in sous_liste]
         y_sl = [ y[i] for i in sous_liste]
@@ -200,6 +199,7 @@ def plot_liste_points(liste_points, sous_liste = None, annotate = False):
         plt.plot(x_sl,y_sl, color = 'Red')
 
     if annotate: 
+        # Annotating all points with their indices
         for idx, (px, py) in enumerate(zip(x, y)):
             plt.annotate(idx, (px, py), textcoords="offset points", xytext=(0,10), ha='center')
 
@@ -210,7 +210,7 @@ def plot_liste_points(liste_points, sous_liste = None, annotate = False):
 def forme_convexe(liste_points):
     x = []
     y = []
-    for point in liste_points:
+    for point in liste_points[0]:
         x.append(point[0])
         y.append(point[1])
     # Finding the point with the minimum x to start with
@@ -243,20 +243,41 @@ def forme_convexe(liste_points):
 
     return contour
 
+def vent_position(grib):
+    
+    pass
+
 
 # Example usage:
+
+matrice_vent = [[(10 ,  0), (10 , 10), (10 ,  7), (10 , 7)],
+                [(10 ,  8), (10 , 30), (10 , 20), (10 , 1)],
+                [(10 , 25), (10 , 24), (10 , 13), (10 , 1)],
+                [(10 , 50), (10 , 11), (10 , 18), (10 , 5)]]
+
 long_ini = -122.431297
 lat_ini = 37.773972
 position = (long_ini, lat_ini)
-avancement = [position]
-ensemble_points = []
+avancement = [[ position]]
+pred = [[[0]]]
+chemins = [[['Début']]]
+for i in range(5):
+    print('Iter',i)
 
-for i in range(3):
-    ensemble_points += forme_convexe(prochains_points_liste(avancement, 13, 0, 0.5, 10))
-    avancement = forme_convexe(prochains_points_liste(avancement, 13, 0, 0.5, 10))
+    temps_début = time.time()
+
+    liste_points = prochains_points_liste(avancement[-1], 13 , 0, 0.5, 20)
+    forme_conc = forme_convexe(liste_points)
+    temps_fin = time.time()
+
+    temps_exécution = temps_fin - temps_début
+    print(f"Temps d'exécution : {temps_exécution} secondes")
+
+    liste_points2 = [ (liste_points[j][0],liste_points[j][1]) for j in forme_conc]
+    plot_liste_points(liste_points,forme_conc)
+    avancement += [liste_points2]
+    
     
 
-plot_liste_points(avancement, forme_convexe(avancement))
-    
-    
+print(avancement)
 
