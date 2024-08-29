@@ -278,7 +278,7 @@ def itere_jusqua_dans_enveloppe(position_initiale, position_finale, lon_grid, la
         
         points_aplatis = flatten_list(liste_parents_enfants)
         
-        enveloppe_concave = forme_concave(points_aplatis, 4.0)
+        enveloppe_concave = forme_convexe(points_aplatis)
 
         plot_points(liste_parents_enfants, enveloppe_concave, position_finale)
         
@@ -294,7 +294,7 @@ def itere_jusqua_dans_enveloppe(position_initiale, position_finale, lon_grid, la
             print("La position finale est maintenant dans l'enveloppe concave.")
             
             # Détermination du point le plus proche de la position finale
-            closest_point = min(positions, key=lambda point: distance(point, position_finale))
+            closest_point = min(points_aplatis, key=lambda point: distance(point, position_finale))
             print(f"Le point le plus proche de la position finale est : {closest_point}")
             
             # Tracer le chemin idéal en remontant les relations parent-enfant
@@ -338,8 +338,8 @@ def plot_points(liste_parents_enfants, enveloppe_convexe, position_finale):
 lon_min, lon_max = -123, -122
 lat_min, lat_max = 38, 70
 grid_size = 10
-wind_strength_range = (0, 20)  # Force du vent en nœuds
-wind_angle_range = (0, 360)  # Angle du vent en degrés
+wind_strength_range = (15, 15)  # Force du vent en nœuds
+wind_angle_range = (0 , 0)  # Angle du vent en degrés
 
 # Générer la carte des vents
 lon_grid, lat_grid, u, v = rv.generate_wind_map(lon_min, lon_max, lat_min, lat_max, grid_size, wind_strength_range, wind_angle_range)
@@ -349,7 +349,7 @@ lon_grid, lat_grid, u, v = rv.generate_wind_map(lon_min, lon_max, lat_min, lat_m
 
 # Exemple d'utilisation
 position_initiale = (-122.5, 38)
-position_finale = (-122.5, 40)
+position_finale = (-122.5, 41)
 pas_temporel = 5
 pas_angle = 20
 
