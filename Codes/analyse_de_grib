@@ -1,3 +1,0 @@
-import cfgrib
-
-grib_data = cfgrib.open_datasets('C:\Users\arthu\OneDrive\Arthur\Programmation\TIPE_Arthur_Lhoste\grib_test.grb')

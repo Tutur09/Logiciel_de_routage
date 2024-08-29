@@ -1,0 +1,82 @@
+import numpy as np
+import math
+import matplotlib.pyplot as plt
+import pandas as pd
+from scipy.spatial import Delaunay
+
+def alpha_shape(points, alpha):
+    """
+    Calculer l'alpha shape (enveloppe concave) d'un ensemble de points.
+
+    Args:
+        points (list of tuples): Liste des points (x, y).
+        alpha (float): Paramètre de contrôle de la finesse de l'enveloppe.
+
+    Returns:
+        List of tuples: Liste de points qui forment le contour de l'alpha shape.
+    """
+    if len(points) < 4:
+        # Les alpha shapes ne sont pas définis pour moins de 4 points
+        return points
+
+    def add_edge(edges, i, j):
+        """
+        Ajouter une arête entre les points i et j, avec vérification pour éviter les doublons.
+        """
+        if (i, j) in edges or (j, i) in edges:
+            # Eviter les doublons
+            return
+        edges.add((i, j))
+
+    tri = Delaunay(points)
+    edges = set()
+    for ia, ib, ic in tri.simplices:
+        pa = points[ia]
+        pb = points[ib]
+        pc = points[ic]
+
+        # Calculer le cercle circonscrit du triangle
+        a = np.linalg.norm(pa - pb)
+        b = np.linalg.norm(pb - pc)
+        c = np.linalg.norm(pc - pa)
+        s = (a + b + c) / 2.0
+        area = np.sqrt(s * (s - a) * (s - b) * (s - c))
+        if area == 0:
+            continue  # Éviter la division par zéro
+        circum_r = a * b * c / (4.0 * area)
+
+        # Inclure les arêtes si le rayon du cercle circonscrit est plus petit que alpha
+        if circum_r < alpha:
+            add_edge(edges, ia, ib)
+            add_edge(edges, ib, ic)
+            add_edge(edges, ic, ia)
+
+    edge_points = list(edges)
+    return [(points[i], points[j]) for i, j in edge_points]
+
+def plot_alpha_shape(points, alpha_shape_edges):
+    """
+    Trace l'alpha shape sur un graphique matplotlib.
+
+    Args:
+        points (list of tuples): Liste de points (x, y).
+        alpha_shape_edges (list of tuples): Liste des arêtes de l'alpha shape.
+    """
+    plt.figure(figsize=(10, 8))
+    x, y = zip(*points)
+    plt.scatter(x, y, color='blue', s=50)
+
+    for edge in alpha_shape_edges:
+        (p1, p2) = edge
+        plt.plot([p1[0], p2[0]], [p1[1], p2[1]], 'r-')
+
+    plt.xlabel('Longitude')
+    plt.ylabel('Latitude')
+    plt.title('Alpha Shape')
+    plt.show()
+
+# Exemple d'utilisation
+points = np.random.rand(30, 2)  # Remplacez par votre ensemble de points
+alpha = 100  # Ajustez alpha pour un ajustement plus serré ou plus lâche
+alpha_shape_edges = alpha_shape(points, alpha)
+plot_alpha_shape(points, alpha_shape_edges)
