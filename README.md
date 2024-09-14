@@ -1,6 +1,7 @@
 Le logiciel avance bien.
 14/09/2024 : implémentation de l'utilisation de carte de vent bien spécifique --> Expérience : zone sans vent ; résulat : le bateau les contourne pour arriver au point final le plus rapidement possible.
                                                                                   A améliorer : puissance de calcul --> le calcul des points peut devenir long.
+
 Notice du logiciel : 
   - pour le vent:
     - la composante u du vent correspond à la composante est/ouest du vent avec u positif signifiant un vent soufflant de l'est et négatif pour un vent souffant de l'ouest.
