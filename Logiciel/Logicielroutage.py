@@ -39,11 +39,11 @@ def projection(position, cap, distance):
     
     return (new_long, new_lat)
 
-def prochains_points(position, pol, d_vent, pas_temporel, pas_angle):
+def prochains_points(position, pol_v_vent, d_vent, pas_temporel, pas_angle):
     liste_points = []
     chemin = list(range(0, 360, pas_angle))
     for angle in chemin:
-        v_bateau = recup_vitesse_fast(pol, d_vent - angle)
+        v_bateau = recup_vitesse_fast(pol_v_vent, d_vent - angle)
         liste_points.append(projection(position, angle, v_bateau * pas_temporel))
     return liste_points
 
@@ -72,9 +72,10 @@ def prochains_points_liste_parent_enfants(liste, lon_grid, lat_grid, u, v, pas_t
         lon, lat = parent
         # Obtenir la direction et la force du vent pour la position actuelle
         v_vent, d_vent = rv.get_wind_at_position(lon, lat, lon_grid, lat_grid, u, v)
-        pol = polaire(v_vent)
+        print(lat,lon)
+        pol_v_vent = polaire(v_vent)
 
-        enfants = prochains_points(parent, pol, d_vent, pas_temporel, pas_angle)
+        enfants = prochains_points(parent, pol_v_vent, d_vent, pas_temporel, pas_angle)
 
         # Filtrer les enfants selon la distance au point d'arrivée
         if filtrer_par_distance and point_arrivee is not None:
@@ -92,6 +93,9 @@ def polaire(vitesse_vent):
     polaire = pd.read_csv('Sunfast3600.pol', delimiter=r'\s+', index_col=0)
     liste_vitesse = polaire.columns
 
+    print(f"Vitesse vent demandée : {vitesse_vent}")
+    print(f"Vitesses disponibles dans la polaire : {liste_vitesse}")
+
     i = 0
     while i < len(liste_vitesse):
         vitesse = float(liste_vitesse[i])
@@ -106,27 +110,35 @@ def polaire(vitesse_vent):
     print('Erreur vitesse de vent')
     return None
 
-def recup_vitesse_fast(pol, angle):
+
+# for i in range(30):
+#     print(polaire(12).index)
+
+def recup_vitesse_fast(pol_v_vent, angle):
+    if pol_v_vent is None:
+        raise ValueError("Erreur : pol_v_vent est None, vérifiez la vitesse du vent.")
+    
     angle = abs(angle)
     if angle > 180:
         angle = 360 - angle
 
-    liste_angle = pol.index
+    liste_angle = pol_v_vent.index
 
     i = 0
-    while i < len(pol):
+    while i < len(pol_v_vent):
         angle_vent = float(liste_angle[i])
         if angle == angle_vent:
-            return pol[liste_angle[i]]
+            return pol_v_vent[liste_angle[i]]
         elif angle_vent > angle:
             inf = i - 1
             sup = i
             t = (angle - float(liste_angle[inf])) / (float(liste_angle[sup]) - float(liste_angle[inf]))
-            return t * pol[liste_angle[inf]] + (1 - t) * pol[liste_angle[sup]]
+            return t * pol_v_vent[liste_angle[inf]] + (1 - t) * pol_v_vent[liste_angle[sup]]
         i += 1
     print('Erreur angle')
     return None
 
+#Pas utile dans le code actuel
 def plot_liste_points(liste_points, sous_liste = None, annotate = False):
     x= []
     y = []
@@ -149,6 +161,7 @@ def plot_liste_points(liste_points, sous_liste = None, annotate = False):
 
     plt.show()
 
+#Pas utile dans le code actuel
 def plot_parents_enfants(liste_parents_enfants):
     couleurs = plt.get_cmap('tab20')
 
@@ -278,7 +291,7 @@ def itere_jusqua_dans_enveloppe(position_initiale, position_finale, lon_grid, la
         
         points_aplatis = flatten_list(liste_parents_enfants)
         
-        enveloppe_concave = forme_convexe(points_aplatis)
+        enveloppe_concave = forme_convexe(points_aplatis)#forme_concave(points_aplatis,3.0)
 
         plot_points(liste_parents_enfants, enveloppe_concave, position_finale)
         
@@ -289,6 +302,8 @@ def itere_jusqua_dans_enveloppe(position_initiale, position_finale, lon_grid, la
                     parent_map[enfant] = parent
         
         positions = enveloppe_concave
+        print("le nombre de points est : ", len(positions))
+        
         
         if is_point_in_hull(position_finale, enveloppe_concave):
             print("La position finale est maintenant dans l'enveloppe concave.")
@@ -316,7 +331,6 @@ def itere_jusqua_dans_enveloppe(position_initiale, position_finale, lon_grid, la
     
     return liste_parents_enfants
 
-
 def plot_points(liste_parents_enfants, enveloppe_convexe, position_finale):
     couleurs = plt.get_cmap('tab20')
     for i, (parent, enfants) in enumerate(liste_parents_enfants):
@@ -336,20 +350,20 @@ def plot_points(liste_parents_enfants, enveloppe_convexe, position_finale):
 
 # Définir les limites de la zone et les paramètres du vent
 lon_min, lon_max = -123, -122
-lat_min, lat_max = 38, 70
-grid_size = 10
-wind_strength_range = (15, 15)  # Force du vent en nœuds
-wind_angle_range = (0 , 0)  # Angle du vent en degrés
+lat_min, lat_max = 37, 42
+grid_size = 3
+wind_strength_range = (10, 15)  # Force du vent en nœuds
+wind_angle_range = (0 , 360)  # Angle du vent en degrés
 
 # Générer la carte des vents
-lon_grid, lat_grid, u, v = rv.generate_wind_map(lon_min, lon_max, lat_min, lat_max, grid_size, wind_strength_range, wind_angle_range)
+lon_grid, lat_grid, u, v = rv.excel2wind_map()
 
 # Tracer la carte des vents
 #rv.plot_wind_map(lon_grid, lat_grid, u, v)
 
 # Exemple d'utilisation
-position_initiale = (-122.5, 38)
-position_finale = (-122.5, 41)
+position_initiale = (8, 43)
+position_finale = (8, 49)
 pas_temporel = 5
 pas_angle = 20
 
