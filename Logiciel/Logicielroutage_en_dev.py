@@ -5,8 +5,9 @@ import pandas as pd
 from matplotlib.path import Path
 import alphashape
 from shapely.geometry import Point, MultiPoint
+import time
 
-import Routage_Vent as rv
+import Routage_Vent_en_dev as rv
 
 def projection(position, cap, distance):
     long_ini = position[0]
@@ -68,20 +69,28 @@ def prochains_points_liste_parent_enfants(liste, lon_grid, lat_grid, u, v, pas_t
     """
     liste_rendu = []
 
-    for parent in liste:
-        lon, lat = parent
+    for lon,lat in liste:
+        #lon, lat = parent
+        start = time.time()
         # Obtenir la direction et la force du vent pour la position actuelle
         v_vent, d_vent = rv.get_wind_at_position(lon, lat, lon_grid, lat_grid, u, v)
-        print(lat,lon)
+        stop = time.time()
+        #print("durée getwindatposition", stop- start)
+        #print(lat,lon)
         pol_v_vent = polaire(v_vent)
 
-        enfants = prochains_points(parent, pol_v_vent, d_vent, pas_temporel, pas_angle)
+        enfants = prochains_points((lon,lat), pol_v_vent, d_vent, pas_temporel, pas_angle)
+        
+        
 
+        start = time.time()
         # Filtrer les enfants selon la distance au point d'arrivée
         if filtrer_par_distance and point_arrivee is not None:
-            enfants = [enfant for enfant in enfants if plus_proche_que_parent(point_arrivee, parent, enfant)]
+            enfants = [enfant for enfant in enfants if plus_proche_que_parent(point_arrivee, (lon,lat), enfant)]
+        stop = time.time()
+        #print("durée suppression", stop- start)
 
-        liste_rendu.append([parent, enfants])
+        liste_rendu.append([(lon,lat), enfants])
     return liste_rendu
 
 def plus_proche_que_parent(point_arrivee, pos_parent, pos_enfant):
@@ -93,8 +102,8 @@ def polaire(vitesse_vent):
     polaire = pd.read_csv('Sunfast3600.pol', delimiter=r'\s+', index_col=0)
     liste_vitesse = polaire.columns
 
-    print(f"Vitesse vent demandée : {vitesse_vent}")
-    print(f"Vitesses disponibles dans la polaire : {liste_vitesse}")
+    #print(f"Vitesse vent demandée : {vitesse_vent}")
+    #print(f"Vitesses disponibles dans la polaire : {liste_vitesse}")
 
     i = 0
     while i < len(liste_vitesse):
@@ -266,35 +275,67 @@ def is_point_in_hull(point, hull):
     path = Path(hull_path)
     return path.contains_point(point)
 
+    
+
 def distance(point1, point2):
     """
     Calcule la distance euclidienne entre deux points.
     """
     return math.sqrt((point1[0] - point2[0])**2 + (point1[1] - point2[1])**2)
 
-def itere_jusqua_dans_enveloppe(position_initiale, position_finale, lon_grid, lat_grid, u, v, pas_temporel, pas_angle):
+def dist_bateau_point(points, point_final, n):
+    """
+    Vérifie s'il existe un point dans 'points' qui est à une distance n ou moins du 'point_final'
+
+    :param points: Liste de tuples, chaque tuple représentant un point (x, y).
+    :param point_final: Tuple représentant le point final (x_final, y_final).
+    :param n: Distance maximale pour la proximité.
+    :return: True si un point est à une distance n ou moins, sinon False.
+    """
+    x_final, y_final = point_final
+    
+    for (x, y) in points:
+        distance = math.sqrt((x - x_final) ** 2 + (y - y_final) ** 2)
+        if distance <= n:
+            return True
+    
+    return False
+
+def itere_jusqua_dans_enveloppe(position_initiale, position_finale, lon_grid, lat_grid, u, v, pas_temporel, pas_angle, dist, live = False):
+    start_i = time.time()
+
+    temp = pas_temporel
+    
     positions = [position_initiale]
     iter_count = 0
     parent_map = {position_initiale: None}  # Pour suivre les relations parent-enfant
-
-    plt.figure(figsize=(10, 8))
-    plt.xlabel('Longitude')
-    plt.ylabel('Latitude')
-    plt.title('Itération et Enveloppe Convexe')
-    plt.scatter(position_finale[0], position_finale[1], color='black', s=100, marker='*', label='Position Finale')
-    plt.grid(True)
-    plt.legend()
+    
+    if live:
+        plt.figure(figsize=(10, 8))
+        plt.xlabel('Longitude')
+        plt.ylabel('Latitude')
+        plt.title('Itération et Enveloppe Convexe')
+        plt.scatter(position_finale[0], position_finale[1], color='black', s=100, marker='*', label='Position Finale')
+        plt.grid(True)
+        plt.legend()
 
     while True:
         print(f"Iteration {iter_count}:")
-        liste_parents_enfants = prochains_points_liste_parent_enfants(positions, lon_grid, lat_grid, u, v, pas_temporel, pas_angle, True, position_finale)
+        
+        start = time.time()
+        liste_parents_enfants = prochains_points_liste_parent_enfants(positions, lon_grid, lat_grid, u, v, temp, pas_angle, True, position_finale)
+        stop = time.time()
+        print("temps liste_parents_enfants ", stop - start)
         
         points_aplatis = flatten_list(liste_parents_enfants)
         
-        enveloppe_concave = forme_convexe(points_aplatis)#forme_concave(points_aplatis,3.0)
+        enveloppe_concave = forme_concave(points_aplatis,2.5)#forme_concave(points_aplatis,3.0)
 
-        plot_points(liste_parents_enfants, enveloppe_concave, position_finale)
+        if live:
+            plot_points(liste_parents_enfants, enveloppe_concave, position_finale)
         
+        start = time.time()
+
         # Mettre à jour les relations parent-enfant
         for parent, enfants in liste_parents_enfants:
             for enfant in enfants:
@@ -304,8 +345,16 @@ def itere_jusqua_dans_enveloppe(position_initiale, position_finale, lon_grid, la
         positions = enveloppe_concave
         print("le nombre de points est : ", len(positions))
         
+        if dist_bateau_point(positions, position_finale, 1):
+            print("validé")
+            if temp >= 0.2:
+                temp *= 2/3
         
-        if is_point_in_hull(position_finale, enveloppe_concave):
+        closest_point = min(points_aplatis, key=lambda point: distance(point, position_finale))
+        print(distance(closest_point, position_finale))
+
+        
+        if dist_bateau_point(positions, position_finale, dist):
             print("La position finale est maintenant dans l'enveloppe concave.")
             
             # Détermination du point le plus proche de la position finale
@@ -321,13 +370,25 @@ def itere_jusqua_dans_enveloppe(position_initiale, position_finale, lon_grid, la
             
             chemin_ideal.reverse()  # Inverser pour avoir le chemin de l'origine à la destination
             chemin_x, chemin_y = zip(*chemin_ideal)
-            plt.plot(chemin_x, chemin_y, color='black', linestyle='-', linewidth=2, label='Chemin Idéal')
-            plt.scatter(chemin_x, chemin_y, color='black', s=50)
             
-            plt.show()
+            stop_f = time.time()
+            print("temps_total ", stop_f-start_i)
+            if not live:
+                rv.plot_wind_map(lon_grid, lat_grid, u, v, position_initiale, position_finale,  chemin_x=chemin_x, chemin_y=chemin_y)
+            
+            if live:      
+                plt.plot(chemin_x, chemin_y, color='black', linestyle='-', linewidth=2, label='Chemin Idéal')
+                plt.scatter(chemin_x, chemin_y, color='black', s=50)
+                plt.show()
+                
+            
+            
             break
         
         iter_count += 1
+        stop = time.time()
+        print("temps verif ", stop - start)
+        
     
     return liste_parents_enfants
 
@@ -362,9 +423,8 @@ lon_grid, lat_grid, u, v = rv.excel2wind_map()
 #rv.plot_wind_map(lon_grid, lat_grid, u, v)
 
 # Exemple d'utilisation
-position_initiale = (8, 43)
-position_finale = (8, 49)
+position_initiale = (7.5, 42)
+position_finale = (7.5, 48)
 pas_temporel = 5
 pas_angle = 20
-
-itere_jusqua_dans_enveloppe(position_initiale, position_finale, lon_grid, lat_grid, u, v, pas_temporel, pas_angle)
+itere_jusqua_dans_enveloppe(position_initiale, position_finale, lon_grid, lat_grid, u, v, pas_temporel, pas_angle, 0.3, False)
