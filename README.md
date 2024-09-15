@@ -8,3 +8,4 @@ Notice du logiciel :
     - la composante v du vent correspond à la composante nord/sud du vent avec u positif signifiant un vent soufflant du nord et négatif pour un vent souffant du sud.
   - pour la partie routage : séléctionner une position initiale et une position finale. Faire bien attention à ce que ces positions existent dans le excel de vent et prendre
     une carte de vent assez large pour que le bateau reste toujours dans une zone où le vent existe : sinon problème.
+![Description de l'image](Logiciel_de_routage\Exemple.png)
