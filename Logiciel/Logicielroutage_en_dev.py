@@ -67,30 +67,37 @@ def prochains_points_liste_parent_enfants(liste, lon_grid, lat_grid, u, v, pas_t
     Returns:
         list: Liste avec des sous-listes parents/enfants.
     """
+    start = time.time()
     liste_rendu = []
 
+    temps = 0
     for lon,lat in liste:
         #lon, lat = parent
-        start = time.time()
-        # Obtenir la direction et la force du vent pour la position actuelle
+        # Obtenir la direction et la force du vent pour la position actuelle      
+        start1 = time.time()
         v_vent, d_vent = rv.get_wind_at_position(lon, lat, lon_grid, lat_grid, u, v)
-        stop = time.time()
-        #print("durée getwindatposition", stop- start)
-        #print(lat,lon)
+
+        stop1 = time.time()
+        temps += (stop1 - start1)
+
+        
         pol_v_vent = polaire(v_vent)
+
 
         enfants = prochains_points((lon,lat), pol_v_vent, d_vent, pas_temporel, pas_angle)
         
         
 
-        start = time.time()
         # Filtrer les enfants selon la distance au point d'arrivée
         if filtrer_par_distance and point_arrivee is not None:
             enfants = [enfant for enfant in enfants if plus_proche_que_parent(point_arrivee, (lon,lat), enfant)]
-        stop = time.time()
-        #print("durée suppression", stop- start)
+
 
         liste_rendu.append([(lon,lat), enfants])
+    stop = time.time()
+    print("temps_ module ", temps)
+
+    print("temps parent_enf", stop - start )
     return liste_rendu
 
 def plus_proche_que_parent(point_arrivee, pos_parent, pos_enfant):
@@ -329,7 +336,7 @@ def itere_jusqua_dans_enveloppe(position_initiale, position_finale, lon_grid, la
         
         points_aplatis = flatten_list(liste_parents_enfants)
         
-        enveloppe_concave = forme_concave(points_aplatis,2.5)#forme_concave(points_aplatis,3.0)
+        enveloppe_concave = forme_concave(points_aplatis,3)#forme_concave(points_aplatis,3.0)
 
         if live:
             plot_points(liste_parents_enfants, enveloppe_concave, position_finale)
@@ -345,7 +352,7 @@ def itere_jusqua_dans_enveloppe(position_initiale, position_finale, lon_grid, la
         positions = enveloppe_concave
         print("le nombre de points est : ", len(positions))
         
-        if dist_bateau_point(positions, position_finale, 1):
+        if dist_bateau_point(positions, position_finale, 0.01):
             print("validé")
             if temp >= 0.2:
                 temp *= 2/3
@@ -423,8 +430,8 @@ lon_grid, lat_grid, u, v = rv.excel2wind_map()
 #rv.plot_wind_map(lon_grid, lat_grid, u, v)
 
 # Exemple d'utilisation
-position_initiale = (7.5, 42)
-position_finale = (7.5, 48)
-pas_temporel = 5
-pas_angle = 20
-itere_jusqua_dans_enveloppe(position_initiale, position_finale, lon_grid, lat_grid, u, v, pas_temporel, pas_angle, 0.3, False)
+position_initiale = (3.45, 47.45)
+position_finale = (3.45, 47.65)
+pas_temporel = 0.2
+pas_angle = 15
+itere_jusqua_dans_enveloppe(position_initiale, position_finale, lon_grid, lat_grid, u, v, pas_temporel, pas_angle, 0.01, False)

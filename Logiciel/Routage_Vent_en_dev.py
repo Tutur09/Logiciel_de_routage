@@ -9,7 +9,8 @@ import alphashape
 from shapely.geometry import Point, MultiPoint
 
 from scipy.interpolate import griddata
-
+from cartopy import crs as ccrs, feature as cfeature
+from time import time
 
 
 
@@ -70,9 +71,6 @@ def excel2wind_map():
 
     return lon_grid, lat_grid, u_values, v_values
 
-#print(excel2wind_map())
-
-
 def get_wind_at_position(lon, lat, lon_grid, lat_grid, u, v):
     """
     Interpoler la direction et la force du vent à une position donnée.
@@ -94,8 +92,11 @@ def get_wind_at_position(lon, lat, lon_grid, lat_grid, u, v):
     v_values = v.flatten()
     
     # Interpolation des composants de vent
+    start = time()
     u_interp = griddata(points, u_values, (lon, lat), method='linear')
     v_interp = griddata(points, v_values, (lon, lat), method='linear')
+    stop = time()
+    print("temps interpolation ", stop - start)
 
     if u_interp is None or v_interp is None:
         raise ValueError("La position demandée est en dehors des limites de la grille.")
@@ -107,58 +108,73 @@ def get_wind_at_position(lon, lat, lon_grid, lat_grid, u, v):
     return wind_strength, wind_angle
 
 
+
 def plot_wind_map(lon_grid, lat_grid, u, v, pos_i, pos_f, chemin_x=None, chemin_y=None):
-    plt.figure(figsize=(10, 8))
+    projPC = ccrs.PlateCarree()  # Projection Plate Carree
     
+    # Définir les limites géographiques
+    lonW = lon_grid.min()
+    lonE = lon_grid.max()
+    latS = lat_grid.min()
+    latN = lat_grid.max()
+    
+    # Création de la figure avec projection géographique
+    fig = plt.figure(figsize=(10, 8))
+    ax = plt.subplot(1, 1, 1, projection=projPC)
+    ax.set_title('Carte des Vents avec Chemin Idéal et Interpolation')
+
+    # Tracé de la carte avec les frontières
+    ax.set_extent([lonW, lonE, latS, latN], crs=projPC)
+    ax.coastlines(resolution='110m', color='black')
+    ax.add_feature(cfeature.STATES, linewidth=0.5, edgecolor='brown')
+    ax.add_feature(cfeature.BORDERS, linewidth=0.7, edgecolor='blue')
+    
+    # Affichage du quadrillage
+    gl = ax.gridlines(draw_labels=True, linewidth=0.5, color='gray', alpha=0.5, linestyle='--')
+
     # Calcul de la magnitude du vent
     wind_magnitude = np.sqrt(u**2 + v**2)
-    
+
     # Création d'une grille régulière pour l'interpolation
     lon_lin = np.linspace(lon_grid.min(), lon_grid.max(), 300)
     lat_lin = np.linspace(lat_grid.min(), lat_grid.max(), 300)
     lon_interp, lat_interp = np.meshgrid(lon_lin, lat_lin)
-    
+
     # Interpolation des composantes u et v sur la nouvelle grille
     u_interp = griddata((lon_grid.ravel(), lat_grid.ravel()), u.ravel(), (lon_interp, lat_interp), method='cubic')
     v_interp = griddata((lon_grid.ravel(), lat_grid.ravel()), v.ravel(), (lon_interp, lat_interp), method='cubic')
-    
+
     # Calcul de la magnitude du vent interpolé
     wind_magnitude_interp = np.sqrt(u_interp**2 + v_interp**2)
-    
+
     # Utilisation de la colormap pour la vitesse du vent
     cmap = plt.get_cmap('viridis')
-    
+
     # Normalisation des couleurs par rapport à la magnitude du vent interpolé
     norm = plt.Normalize(wind_magnitude_interp.min(), wind_magnitude_interp.max())
-    
+
     # Affichage de la carte colorée avec les magnitudes du vent interpolées
-    plt.contourf(lon_interp, lat_interp, wind_magnitude_interp, cmap=cmap, levels=100, norm=norm)
-    
+    contour = ax.contourf(lon_interp, lat_interp, wind_magnitude_interp, cmap=cmap, levels=100, norm=norm, transform=ccrs.PlateCarree())
+
     # Affichage du champ de vent avec des flèches noires (taille ajustée)
-    plt.quiver(lon_grid, lat_grid, -u, -v, color='black', angles='xy', scale_units='xy', scale=50)
-    
+    ax.quiver(lon_grid, lat_grid, u, v, color='black', angles='xy', scale_units='xy', scale=200, transform=ccrs.PlateCarree())
+
     # Affichage des points de départ et d'arrivée
-    plt.scatter(pos_i[0], pos_i[1], color='green', s=100, label='Position Initiale')
-    plt.scatter(pos_f[0], pos_f[1], color='red', s=100, label='Position Finale')
-    
+    ax.scatter(pos_i[0], pos_i[1], color='green', s=100, label='Position Initiale', transform=ccrs.PlateCarree())
+    ax.scatter(pos_f[0], pos_f[1], color='red', s=100, label='Position Finale', transform=ccrs.PlateCarree())
+
     # Tracé du chemin idéal s'il est fourni
     if chemin_x is not None and chemin_y is not None:
-        plt.plot(chemin_x, chemin_y, color='black', linestyle='-', linewidth=2, label='Chemin Idéal')
-        plt.scatter(chemin_x, chemin_y, color='black', s=50)
-    
-    # Paramètres du graphique
-    plt.xlim(lon_grid.min() - 0.1, lon_grid.max() + 0.1)
-    plt.ylim(lat_grid.min() - 0.1, lat_grid.max() + 0.1)
-    plt.xlabel('Longitude')
-    plt.ylabel('Latitude')
-    plt.title('Carte des Vents avec Chemin Idéal et Interpolation')
-    
+        ax.plot(chemin_x, chemin_y, color='black', linestyle='-', linewidth=2, label='Chemin Idéal', transform=ccrs.PlateCarree())
+        ax.scatter(chemin_x, chemin_y, color='black', s=50, transform=ccrs.PlateCarree())
+
     # Ajout de la barre de couleur
-    plt.colorbar(label='Force du vent')
-    
-    plt.legend()
-    plt.grid(True)
+    cbar = plt.colorbar(contour, ax=ax, orientation='vertical', label='Force du vent')
+
+    # Affichage de la légende et du quadrillage
+    ax.legend()
     plt.show()
+
 
 
 
