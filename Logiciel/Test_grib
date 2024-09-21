@@ -1,3 +1,42 @@
-import xarray as xr 
+import xarray as xr
+import matplotlib.pyplot as plt
+import numpy as np
+import cartopy.crs as ccrs
+import cartopy.feature
 
-ds = xr.open_dataset('era5-levels-members.grib', engine='cfgrib')
+
+# Charge le dataset
+ds = xr.open_dataset('C:/Users/arthu/OneDrive/Arthur/Programmation/TIPE_Arthur_Lhoste/Logiciel/Données_vent/METEOCONSULT06Z_VENT_0921_Manche.grb', engine='cfgrib')
+
+# Affiche les variables disponibles
+print(ds)
+
+# Choisir une étape spécifique (par exemple, la 10ème)
+step_index = 10
+u10_specific = ds['u10'].isel(step=step_index)
+v10_specific = ds['v10'].isel(step=step_index)
+
+# Calculer la vitesse du vent
+wind_speed = np.sqrt(u10_specific**2 + v10_specific**2)
+
+# Tracer les données de vent avec Cartopy
+plt.figure(figsize=(10, 6))
+ax = plt.axes(projection=ccrs.PlateCarree())
+ax.set_extent([-10, 5, 46, 52], crs=ccrs.PlateCarree())  # Ajuste l'extent selon la région d'intérêt
+
+# Ajouter des features de la carte
+ax.coastlines()
+ax.add_feature(cartopy.feature.BORDERS, linestyle=':')
+ax.add_feature(cartopy.feature.LAND, facecolor='lightgray')
+ax.add_feature(cartopy.feature.OCEAN, facecolor='lightblue')
+
+# Tracer les vecteurs de vent
+q = ax.quiver(ds['longitude'], ds['latitude'], u10_specific, v10_specific, wind_speed, scale=50, cmap='viridis', transform=ccrs.PlateCarree())
+
+plt.title(f'Vent à l\'étape {step_index} (Heure spécifique)')
+plt.xlabel('Longitude')
+plt.ylabel('Latitude')
+
+# Ajouter une légende pour la vitesse du vent
+plt.colorbar(q, label='Vitesse du vent (m/s)', orientation='vertical')
+plt.show()

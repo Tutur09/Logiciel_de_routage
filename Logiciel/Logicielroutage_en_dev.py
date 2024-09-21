@@ -6,8 +6,12 @@ from matplotlib.path import Path
 import alphashape
 from shapely.geometry import Point, MultiPoint
 import time
-
 import Routage_Vent_en_dev as rv
+import xarray as xr
+from cartopy import crs as ccrs, feature as cfeature
+import os
+
+
 
 def projection(position, cap, distance):
     long_ini = position[0]
@@ -48,7 +52,7 @@ def prochains_points(position, pol_v_vent, d_vent, pas_temporel, pas_angle):
         liste_points.append(projection(position, angle, v_bateau * pas_temporel))
     return liste_points
 
-def prochains_points_liste_parent_enfants(liste, lon_grid, lat_grid, u, v, pas_temporel, pas_angle, filtrer_par_distance=False, point_arrivee=None):
+def prochains_points_liste_parent_enfants(liste, pas_temporel, pas_angle, filtrer_par_distance=False, point_arrivee=None, heure = 0):
     """
     Génère des sous-listes de parents et d'enfants pour chaque point parent.
     Utilise les données de vent de la carte pour calculer les trajectoires.
@@ -75,7 +79,7 @@ def prochains_points_liste_parent_enfants(liste, lon_grid, lat_grid, u, v, pas_t
         #lon, lat = parent
         # Obtenir la direction et la force du vent pour la position actuelle      
         start1 = time.time()
-        v_vent, d_vent = rv.get_wind_at_position(lon, lat, lon_grid, lat_grid, u, v)
+        v_vent, d_vent = rv.get_wind_from_grib(lat, lon, heure)
 
         stop1 = time.time()
         temps += (stop1 - start1)
@@ -97,7 +101,6 @@ def prochains_points_liste_parent_enfants(liste, lon_grid, lat_grid, u, v, pas_t
     stop = time.time()
     print("temps_ module ", temps)
 
-    print("temps parent_enf", stop - start )
     return liste_rendu
 
 def plus_proche_que_parent(point_arrivee, pos_parent, pos_enfant):
@@ -125,10 +128,6 @@ def polaire(vitesse_vent):
         i += 1
     print('Erreur vitesse de vent')
     return None
-
-
-# for i in range(30):
-#     print(polaire(12).index)
 
 def recup_vitesse_fast(pol_v_vent, angle):
     if pol_v_vent is None:
@@ -282,8 +281,6 @@ def is_point_in_hull(point, hull):
     path = Path(hull_path)
     return path.contains_point(point)
 
-    
-
 def distance(point1, point2):
     """
     Calcule la distance euclidienne entre deux points.
@@ -308,7 +305,10 @@ def dist_bateau_point(points, point_final, n):
     
     return False
 
-def itere_jusqua_dans_enveloppe(position_initiale, position_finale, lon_grid, lat_grid, u, v, pas_temporel, pas_angle, dist, live = False):
+def itere_jusqua_dans_enveloppe(position_initiale, position_finale, pas_temporel, pas_angle, dist, live = False, enregistrement = True):
+    
+    heure = 0
+    
     start_i = time.time()
 
     temp = pas_temporel
@@ -328,21 +328,21 @@ def itere_jusqua_dans_enveloppe(position_initiale, position_finale, lon_grid, la
 
     while True:
         print(f"Iteration {iter_count}:")
+        print('Heure ', heure)
         
         start = time.time()
-        liste_parents_enfants = prochains_points_liste_parent_enfants(positions, lon_grid, lat_grid, u, v, temp, pas_angle, True, position_finale)
+        liste_parents_enfants = prochains_points_liste_parent_enfants(positions, temp, pas_angle, True, position_finale, heure = heure)
+        heure += pas_temporel
         stop = time.time()
         print("temps liste_parents_enfants ", stop - start)
         
         points_aplatis = flatten_list(liste_parents_enfants)
         
-        enveloppe_concave = forme_concave(points_aplatis,3)#forme_concave(points_aplatis,3.0)
+        enveloppe_concave = forme_concave(points_aplatis,5)#forme_concave(points_aplatis,3.0)
 
         if live:
             plot_points(liste_parents_enfants, enveloppe_concave, position_finale)
         
-        start = time.time()
-
         # Mettre à jour les relations parent-enfant
         for parent, enfants in liste_parents_enfants:
             for enfant in enfants:
@@ -354,11 +354,11 @@ def itere_jusqua_dans_enveloppe(position_initiale, position_finale, lon_grid, la
         
         if dist_bateau_point(positions, position_finale, 0.01):
             print("validé")
-            if temp >= 0.2:
+            if temp >= 0.5:
                 temp *= 2/3
         
         closest_point = min(points_aplatis, key=lambda point: distance(point, position_finale))
-        print(distance(closest_point, position_finale))
+        print('distance arrivée, point_plus_proche ', distance(closest_point, position_finale))
 
         
         if dist_bateau_point(positions, position_finale, dist):
@@ -381,7 +381,8 @@ def itere_jusqua_dans_enveloppe(position_initiale, position_finale, lon_grid, la
             stop_f = time.time()
             print("temps_total ", stop_f-start_i)
             if not live:
-                rv.plot_wind_map(lon_grid, lat_grid, u, v, position_initiale, position_finale,  chemin_x=chemin_x, chemin_y=chemin_y)
+                pass
+                rv.plot_wind(chemin_x=chemin_x, chemin_y=chemin_y)
             
             if live:      
                 plt.plot(chemin_x, chemin_y, color='black', linestyle='-', linewidth=2, label='Chemin Idéal')
@@ -389,13 +390,13 @@ def itere_jusqua_dans_enveloppe(position_initiale, position_finale, lon_grid, la
                 plt.show()
                 
             
-            
             break
         
         iter_count += 1
-        stop = time.time()
-        print("temps verif ", stop - start)
-        
+    
+    if enregistrement == True:
+        lien_dossier = r"C:\Users\arthu\OneDrive\Arthur\Programmation\TIPE_Arthur_Lhoste\route_ideale"
+        rv.enregistrement_route(chemin_x, chemin_y, heure, output_dir=lien_dossier)    
     
     return liste_parents_enfants
 
@@ -415,6 +416,7 @@ def plot_points(liste_parents_enfants, enveloppe_convexe, position_finale):
     plt.pause(0.5)
 
 
+    
 
 # Définir les limites de la zone et les paramètres du vent
 lon_min, lon_max = -123, -122
@@ -423,15 +425,13 @@ grid_size = 3
 wind_strength_range = (10, 15)  # Force du vent en nœuds
 wind_angle_range = (0 , 360)  # Angle du vent en degrés
 
-# Générer la carte des vents
-lon_grid, lat_grid, u, v = rv.excel2wind_map()
 
 # Tracer la carte des vents
 #rv.plot_wind_map(lon_grid, lat_grid, u, v)
 
 # Exemple d'utilisation
-position_initiale = (3.45, 47.45)
-position_finale = (3.45, 47.65)
-pas_temporel = 0.2
-pas_angle = 15
-itere_jusqua_dans_enveloppe(position_initiale, position_finale, lon_grid, lat_grid, u, v, pas_temporel, pas_angle, 0.01, False)
+position_initiale = (-9, 48)
+position_finale = (-3.2, 47.24)
+pas_temporel = 3
+pas_angle = 20
+itere_jusqua_dans_enveloppe(position_initiale, position_finale, pas_temporel, pas_angle, 0.5, False)

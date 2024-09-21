@@ -1,5 +1,4 @@
 #Je sépare la partie vent du code afin de rendre le code plus compréhensible
-
 import numpy as np
 import math
 import matplotlib.pyplot as plt
@@ -7,13 +6,21 @@ import pandas as pd
 from matplotlib.path import Path
 import alphashape
 from shapely.geometry import Point, MultiPoint
-
 from scipy.interpolate import griddata
+from scipy.spatial import cKDTree
+
 from cartopy import crs as ccrs, feature as cfeature
 from time import time
+import xarray as xr
+import os
 
+file_path = 'C:/Users/arthu/OneDrive/Arthur/Programmation/TIPE_Arthur_Lhoste/Logiciel/Données_vent/METEOCONSULT12Z_VENT_0921_Gascogne.grb'
+# Charge le dataset
+ds = xr.open_dataset(file_path, engine='cfgrib')
 
-
+# Charger les données u10 et v10 pour tout le dataset comme ça pas besoin de recalculer
+ds.u10.load()
+ds.v10.load()
 
 def generate_wind_map(lon_min, lon_max, lat_min, lat_max, grid_size, wind_strength_range, wind_angle_range):
 
@@ -107,8 +114,6 @@ def get_wind_at_position(lon, lat, lon_grid, lat_grid, u, v):
 
     return wind_strength, wind_angle
 
-
-
 def plot_wind_map(lon_grid, lat_grid, u, v, pos_i, pos_f, chemin_x=None, chemin_y=None):
     projPC = ccrs.PlateCarree()  # Projection Plate Carree
     
@@ -175,17 +180,173 @@ def plot_wind_map(lon_grid, lat_grid, u, v, pos_i, pos_f, chemin_x=None, chemin_
     ax.legend()
     plt.show()
 
+def plot_wind(step_indices=[1], chemin_x=None, chemin_y=None, skip=4, save_plots=False, output_dir=r'C:\Users\arthu\OneDrive\Arthur\Programmation\TIPE_Arthur_Lhoste\images_png'):
+    # Créer une figure pour les plots
+    for step_index in step_indices:
+        plt.figure(figsize=(12, 7))  # Créer une nouvelle figure à chaque étape
+
+        # Choisir une étape spécifique
+        u10_specific = ds['u10'].isel(step=step_index)
+        v10_specific = ds['v10'].isel(step=step_index)
+
+        # Calculer la vitesse du vent
+        wind_speed = np.sqrt(u10_specific**2 + v10_specific**2)
+
+        # Créer un sous-plot pour chaque étape
+        ax = plt.subplot(1, 1, 1, projection=ccrs.PlateCarree())
+        ax.set_extent([-10, -1, 43.2, 49], crs=ccrs.PlateCarree())  # Ajuste ces valeurs en fonction de ta zone d'intérêt
+
+        # Ajouter des features de la carte
+        ax.coastlines()
+        ax.add_feature(cfeature.BORDERS, linestyle=':')
+        ax.add_feature(cfeature.LAND, facecolor='lightgray')
+        ax.add_feature(cfeature.OCEAN, facecolor='lightblue')
+
+        # Tracer la grille de latitudes et longitudes
+        gl = ax.gridlines(draw_labels=True, color='gray', alpha=0.5, linestyle='--')
+        gl.top_labels = False  # Désactive les labels en haut
+        gl.right_labels = False  # Désactive les labels à droite
+        gl.xlabel_style = {'size': 10}  # Taille du texte pour les longitudes
+        gl.ylabel_style = {'size': 10}  # Taille du texte pour les latitudes
+
+        # Tracer les vecteurs de vent avec un échantillonnage, en fonction des latitudes et longitudes
+        q = ax.quiver(ds['longitude'][::skip], ds['latitude'][::skip], 
+                      u10_specific[::skip, ::skip], v10_specific[::skip, ::skip], 
+                      wind_speed[::skip, ::skip], scale=50, cmap='viridis', 
+                      transform=ccrs.PlateCarree())
+
+        # Ajouter les titres et les étiquettes
+        ax.set_title(f"Carte des vents - Étape {step_index}")
+        ax.set_xlabel('Longitude')
+        ax.set_ylabel('Latitude')
+
+        # Ajouter une légende pour la vitesse du vent
+        plt.colorbar(q, ax=ax, label='Vitesse du vent (m/s)', orientation='vertical')
+
+        # Tracé du chemin idéal s'il est fourni
+        if chemin_x is not None and chemin_y is not None:
+            ax.plot(chemin_x, chemin_y, color='black', linestyle='-', linewidth=2, label='Chemin Idéal', transform=ccrs.PlateCarree())
+            ax.scatter(chemin_x, chemin_y, color='black', s=50, label='Points du Chemin', transform=ccrs.PlateCarree())
+
+        # Enregistrer le plot si l'option save_plots est activée
+        if save_plots:
+            plot_filename = f"{output_dir}/carte_vents_step_{step_index}.png"
+            plt.savefig(plot_filename)
+            print(f"Plot enregistré sous : {plot_filename}")
+
+        plt.tight_layout()
+         # Montrer les plots seulement si save_plots est False
+        if not save_plots:
+            plt.show()  # Afficher les plots
+        
 
 
 
+def get_wind_from_grib(lat, lon, time_step=0):
+    """
+    Récupère les composantes u10 et v10 du vent à partir du voisin le plus proche.
+    """
+    lon = lon % 360
+    start = time()
+    
+    # Maintenant, l'accès aux données sera plus rapide
+    u10_values = ds.u10.isel(step=time_step).values
+    v10_values = ds.v10.isel(step=time_step).values
+    stop1 = time()
+    #print(stop1 - start)
+    
+    latitudes = ds.latitude.values
+    longitudes = ds.longitude.values
+    
+    stop = time()
+    #print('temps récupérer une fois le vent ', stop - start)
+    
+    # Trouver le voisin le plus proche
+    lat_diff = np.abs(latitudes - lat)
+    lon_diff = np.abs(longitudes - lon)
+       
+    # Calculer les distances
+    distances = lat_diff[:, None]**2 + lon_diff**2  # Matrice des distances
+    closest_index = np.unravel_index(np.argmin(distances), distances.shape)
+    
+    
+    # Récupérer les valeurs du voisin le plus proche
+    u10 = u10_values[closest_index]
+    v10 = v10_values[closest_index]
+    
+    # Calculer la vitesse et l'angle
+    v_vent = np.sqrt((u10)**2 + v10**2) 
+    a_vent = (np.degrees(np.arctan2(-u10, -v10))) % 360 
+    
+    
+    return v_vent, a_vent
 
-lon_grid, lat_grid, u_values, v_values = excel2wind_map()
+def enregistrement_route(chemin_x, chemin_y, heures, output_dir='./', skip = 4):
+    
+    # Créer le répertoire de sortie s'il n'existe pas
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
-position_initiale = (8, 43)
-position_finale = (8, 49)
+    for heure in range(0, heures, 3):
+        plt.figure(figsize=(12, 7))
 
-#print(get_wind_at_position(6,46, lon_grid, lat_grid, u_values, v_values))
+        # Choisir les données de vent pour l'heure actuelle
+        u10_specific = ds['u10'].isel(step=heure)
+        v10_specific = ds['v10'].isel(step=heure)
+        wind_speed = np.sqrt(u10_specific**2 + v10_specific**2)
 
-#print(get_wind_at_position(3,46, lon_grid, lat_grid, u_values, v_values))
+        # Créer un sous-plot
+        ax = plt.subplot(1, 1, 1, projection=ccrs.PlateCarree())
+        ax.set_extent([-10, -1, 43.2, 49], crs=ccrs.PlateCarree())
 
-plot_wind_map(lon_grid, lat_grid, u_values, v_values, position_initiale, position_finale)
+        # Ajouter des features de la carte
+        ax.coastlines()
+        ax.add_feature(cfeature.BORDERS, linestyle=':')
+        ax.add_feature(cfeature.LAND, facecolor='lightgray')
+        ax.add_feature(cfeature.OCEAN, facecolor='lightblue')
+
+        # Tracer la route idéale jusqu'à l'heure actuelle
+        ax.plot(chemin_x[:heure + 1], chemin_y[:heure + 1], color='black', linestyle='-', linewidth=2, label='Chemin Idéal', transform=ccrs.PlateCarree())
+        ax.scatter(chemin_x[:heure + 1], chemin_y[:heure + 1], color='black', s=50, transform=ccrs.PlateCarree())
+
+        # Tracer les vecteurs de vent
+        q = ax.quiver(ds['longitude'][::skip], ds['latitude'][::skip], 
+                      u10_specific[::skip, ::skip], v10_specific[::skip, ::skip], 
+                      wind_speed[::skip, ::skip], scale=50, cmap='viridis', 
+                      transform=ccrs.PlateCarree())
+
+        # Ajouter les titres et les étiquettes
+        ax.set_title(f"Route Idéale et Vent à l'Heure {heure}")
+        ax.set_xlabel('Longitude')
+        ax.set_ylabel('Latitude')
+
+        # Ajouter une légende pour la vitesse du vent
+        plt.colorbar(q, ax=ax, label='Vitesse du vent (m/s)', orientation='vertical')
+
+        # Enregistrer le plot
+        plot_filename = f"{output_dir}/route_ideale_vent_heure_{heure}.png"
+        plt.savefig(plot_filename)
+        print(f"Plot enregistré sous : {plot_filename}")
+
+        plt.close()  # Fermer la figure pour libérer la mémoire
+    
+
+
+# # Exemple d'utilisation
+lon = -3.0  # Longitude de la position
+lat = 47.0  # Latitude de la position
+lon1 = -4.468
+lat1 = 47.29
+# step_index = 10  # Index de l'étape
+
+# start = time()
+# wind_strength, wind_angle = get_wind_from_grib(lon, lat)
+# stop = time()
+# print('temps est de ', stop - start)
+# print("Force du vent :", wind_strength)
+# print("Direction du vent :", wind_angle)
+#plot_wind(step_indices=[i for i in range(120)], save_plots=True)
+
+print(ds)
+
+print('**************** valid time **************** \n ', ds.valid_time.values)
