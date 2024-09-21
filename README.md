@@ -1,4 +1,4 @@
-# Logiciel de Routage Vent
+# Logiciel de Routage
 
 ## Description
 
@@ -21,7 +21,7 @@ Ce logiciel permet de calculer et d'analyser des itinéraires en tenant compte d
 ## Utilisation
 Me demander et pas évident d'installer cfgrib 
 
-**EXEMPLES**
+## EXEMPLES
 ![Carte de vent défini par l'utilisateur](https://github.com/Tutur09/Logiciel_de_routage/raw/main/Exemple.png)
 _Carte de vent défini par l'utilisateur_
 
