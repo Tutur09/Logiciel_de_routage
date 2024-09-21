@@ -21,6 +21,9 @@ Ce logiciel permet de calculer et d'analyser des itinéraires en tenant compte d
 ## Utilisation
 Me demander et pas évident d'installer cfgrib 
 
+**EXEMPLES**
 ![Carte de vent défini par l'utilisateur](https://github.com/Tutur09/Logiciel_de_routage/raw/main/Exemple.png)
+
+
 ![Récupération du vent en temps réel grâçe aux fichiers GRIB de Météo Marine](https://github.com/Tutur09/Logiciel_de_routage/raw/main/route_ideale/route_ideale_vent_heure_18.png)
 
