@@ -6,11 +6,11 @@ from matplotlib.path import Path
 import alphashape
 from shapely.geometry import Point, MultiPoint
 import time
-import Routage_Vent_en_dev as rv
 import xarray as xr
 from cartopy import crs as ccrs, feature as cfeature
 import os
 
+import Routage_Vent_en_dev as rv
 
 
 def projection(position, cap, distance):
@@ -71,10 +71,10 @@ def prochains_points_liste_parent_enfants(liste, pas_temporel, pas_angle, filtre
     Returns:
         list: Liste avec des sous-listes parents/enfants.
     """
-    start = time.time()
     liste_rendu = []
 
     temps = 0
+    temps2 = 0
     for lon,lat in liste:
         #lon, lat = parent
         # Obtenir la direction et la force du vent pour la position actuelle      
@@ -87,8 +87,10 @@ def prochains_points_liste_parent_enfants(liste, pas_temporel, pas_angle, filtre
         
         pol_v_vent = polaire(v_vent)
 
-
+        start2 = time.time()
         enfants = prochains_points((lon,lat), pol_v_vent, d_vent, pas_temporel, pas_angle)
+        stop2 = time.time()
+        temps2 += stop2 - start1
         
         
 
@@ -98,8 +100,8 @@ def prochains_points_liste_parent_enfants(liste, pas_temporel, pas_angle, filtre
 
 
         liste_rendu.append([(lon,lat), enfants])
-    stop = time.time()
-    print("temps_ module ", temps)
+    print("temps_ get_wind ", temps)
+    print("temps prochain_points", temps2)
 
     return liste_rendu
 
@@ -152,94 +154,6 @@ def recup_vitesse_fast(pol_v_vent, angle):
         i += 1
     print('Erreur angle')
     return None
-
-#Pas utile dans le code actuel
-def plot_liste_points(liste_points, sous_liste = None, annotate = False):
-    x= []
-    y = []
-    for point in liste_points:
-        x.append(point[0])
-        y.append(point[1])
-    x.append(liste_points[0][0])
-    y.append(liste_points[0][1])
-    plt.scatter(x,y)
-    
-    if sous_liste !=None:
-        x_sl = [ x[i] for i in sous_liste]
-        y_sl = [ y[i] for i in sous_liste]
-        
-        plt.plot(x_sl,y_sl, color = 'Red')
-
-    if annotate: 
-        for idx, (px, py) in enumerate(zip(x, y)):
-            plt.annotate(idx, (px, py), textcoords="offset points", xytext=(0,10), ha='center')
-
-    plt.show()
-
-#Pas utile dans le code actuel
-def plot_parents_enfants(liste_parents_enfants):
-    couleurs = plt.get_cmap('tab20')
-
-    for i, (parent, enfants) in enumerate(liste_parents_enfants):
-        couleur = couleurs(i / len(liste_parents_enfants))
-        plt.scatter(parent[0], parent[1], color=couleur, s=100, label=f'Parent {i+1}')
-        for enfant in enfants:
-            plt.scatter(enfant[0], enfant[1], color=couleur, s=50)
-            plt.plot([parent[0], enfant[0]], [parent[1], enfant[1]], color=couleur, linestyle='-', linewidth=1)
-
-    plt.legend()
-    plt.show()
-
-def orientation(p, q, r):
-    """
-    Calculer l'orientation du triplet (p, q, r).
-    Renvoie 0 si les points sont colinéaires, 1 si dans le sens horaire, 2 si dans le sens antihoraire.
-    """
-    val = (q[1] - p[1]) * (r[0] - q[0]) - (q[0] - p[0]) * (r[1] - q[1])
-    if val == 0:
-        return 0
-    elif val > 0:
-        return 1
-    else:
-        return 2
-
-def forme_convexe(liste_points):
-    """
-    Renvoie les points qui se trouvent sur l'enveloppe convexe.
-    :param liste_points: Liste de tuples (x, y)
-    :return: Liste de points qui sont sur l'enveloppe convexe
-    """
-    n = len(liste_points)
-    if n < 3:
-        return []  # Moins de 3 points ne peuvent pas former une enveloppe convexe
-
-    # Trouver le point le plus à gauche
-    gauche = 0
-    for i in range(1, n):
-        if liste_points[i][0] < liste_points[gauche][0]:
-            gauche = i
-
-    # Initialiser l'enveloppe convexe
-    contour = []
-    p = gauche
-    while True:
-        # Ajouter le point actuel à l'enveloppe
-        contour.append(liste_points[p])
-
-        # Trouver le point 'q' tel que l'orientation(p, q, i) est dans le sens antihoraire pour tous les points i
-        q = (p + 1) % n
-        for i in range(n):
-            if orientation(liste_points[p], liste_points[i], liste_points[q]) == 2:
-                q = i
-
-        # Maintenant, q est le point le plus à droite du point p
-        p = q
-
-        # Boucle jusqu'à ce que l'on revienne au premier point
-        if p == gauche:
-            break
-
-    return contour
 
 def forme_concave(liste_points, alpha):
     
@@ -332,8 +246,9 @@ def itere_jusqua_dans_enveloppe(position_initiale, position_finale, pas_temporel
         
         start = time.time()
         liste_parents_enfants = prochains_points_liste_parent_enfants(positions, temp, pas_angle, True, position_finale, heure = heure)
-        heure += pas_temporel
         stop = time.time()
+
+        heure += pas_temporel
         print("temps liste_parents_enfants ", stop - start)
         
         points_aplatis = flatten_list(liste_parents_enfants)
@@ -415,23 +330,3 @@ def plot_points(liste_parents_enfants, enveloppe_convexe, position_finale):
 
     plt.pause(0.5)
 
-
-    
-
-# Définir les limites de la zone et les paramètres du vent
-lon_min, lon_max = -123, -122
-lat_min, lat_max = 37, 42
-grid_size = 3
-wind_strength_range = (10, 15)  # Force du vent en nœuds
-wind_angle_range = (0 , 360)  # Angle du vent en degrés
-
-
-# Tracer la carte des vents
-#rv.plot_wind_map(lon_grid, lat_grid, u, v)
-
-# Exemple d'utilisation
-position_initiale = (-9, 48)
-position_finale = (-3.2, 47.24)
-pas_temporel = 3
-pas_angle = 20
-itere_jusqua_dans_enveloppe(position_initiale, position_finale, pas_temporel, pas_angle, 0.5, False)

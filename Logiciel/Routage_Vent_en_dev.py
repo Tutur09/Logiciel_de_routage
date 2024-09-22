@@ -1,26 +1,14 @@
 #Je sépare la partie vent du code afin de rendre le code plus compréhensible
 import numpy as np
-import math
 import matplotlib.pyplot as plt
 import pandas as pd
-from matplotlib.path import Path
-import alphashape
 from shapely.geometry import Point, MultiPoint
 from scipy.interpolate import griddata
-from scipy.spatial import cKDTree
-
 from cartopy import crs as ccrs, feature as cfeature
 from time import time
 import xarray as xr
 import os
 
-file_path = 'C:/Users/arthu/OneDrive/Arthur/Programmation/TIPE_Arthur_Lhoste/Logiciel/Données_vent/METEOCONSULT12Z_VENT_0921_Gascogne.grb'
-# Charge le dataset
-ds = xr.open_dataset(file_path, engine='cfgrib')
-
-# Charger les données u10 et v10 pour tout le dataset comme ça pas besoin de recalculer
-ds.u10.load()
-ds.v10.load()
 
 def generate_wind_map(lon_min, lon_max, lat_min, lat_max, grid_size, wind_strength_range, wind_angle_range):
 
@@ -239,9 +227,6 @@ def plot_wind(step_indices=[1], chemin_x=None, chemin_y=None, skip=4, save_plots
         if not save_plots:
             plt.show()  # Afficher les plots
         
-
-
-
 def get_wind_from_grib(lat, lon, time_step=0):
     """
     Récupère les composantes u10 et v10 du vent à partir du voisin le plus proche.
@@ -287,8 +272,10 @@ def enregistrement_route(chemin_x, chemin_y, heures, output_dir='./', skip = 4):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    for heure in range(0, heures, 3):
-        plt.figure(figsize=(12, 7))
+    point = 0
+
+    for heure in range(0, heures, 1):
+        plt.figure(figsize=(12, 7)) 
 
         # Choisir les données de vent pour l'heure actuelle
         u10_specific = ds['u10'].isel(step=heure)
@@ -306,9 +293,11 @@ def enregistrement_route(chemin_x, chemin_y, heures, output_dir='./', skip = 4):
         ax.add_feature(cfeature.OCEAN, facecolor='lightblue')
 
         # Tracer la route idéale jusqu'à l'heure actuelle
-        ax.plot(chemin_x[:heure + 1], chemin_y[:heure + 1], color='black', linestyle='-', linewidth=2, label='Chemin Idéal', transform=ccrs.PlateCarree())
-        ax.scatter(chemin_x[:heure + 1], chemin_y[:heure + 1], color='black', s=50, transform=ccrs.PlateCarree())
+        ax.plot(chemin_x[:point + 1], chemin_y[:point + 1], color='black', linestyle='-', linewidth=2, label='Chemin Idéal', transform=ccrs.PlateCarree())
+        ax.scatter(chemin_x[:point + 1], chemin_y[:point + 1], color='black', s=50, transform=ccrs.PlateCarree())
 
+        point += 1
+        
         # Tracer les vecteurs de vent
         q = ax.quiver(ds['longitude'][::skip], ds['latitude'][::skip], 
                       u10_specific[::skip, ::skip], v10_specific[::skip, ::skip], 
@@ -329,24 +318,16 @@ def enregistrement_route(chemin_x, chemin_y, heures, output_dir='./', skip = 4):
         print(f"Plot enregistré sous : {plot_filename}")
 
         plt.close()  # Fermer la figure pour libérer la mémoire
-    
+  
+  
+#Chemin d'accès du fichier GRIB    
+file_path = 'C:/Users/arthu/OneDrive/Arthur/Programmation/TIPE_Arthur_Lhoste/Logiciel/Données_vent/METEOCONSULT12Z_VENT_0921_Gascogne.grb'
+file_path_courant = 'C:/Users/arthu/OneDrive/Arthur/Programmation/TIPE_Arthur_Lhoste/Logiciel/Données_vent/METEOCONSULT00Z_COURANT_0921_Gascogne.grb'
 
+# Charger le dataset
+ds = xr.open_dataset(file_path, engine='cfgrib')
+ds_ = xr.open_dataset(file_path_courant, engine = 'cfgrib')
 
-# # Exemple d'utilisation
-lon = -3.0  # Longitude de la position
-lat = 47.0  # Latitude de la position
-lon1 = -4.468
-lat1 = 47.29
-# step_index = 10  # Index de l'étape
-
-# start = time()
-# wind_strength, wind_angle = get_wind_from_grib(lon, lat)
-# stop = time()
-# print('temps est de ', stop - start)
-# print("Force du vent :", wind_strength)
-# print("Direction du vent :", wind_angle)
-#plot_wind(step_indices=[i for i in range(120)], save_plots=True)
-
-print(ds)
-
-print('**************** valid time **************** \n ', ds.valid_time.values)
+# Charger les données u10 et v10 pour tout le dataset comme ça pas besoin de recalculer --> gain de temps considérable
+ds.u10.load()
+ds.v10.load()
