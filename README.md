@@ -1,14 +1,29 @@
-Le logiciel avance bien.
-14/09/2024 : implémentation de l'utilisation de carte de vent bien spécifique --> Expérience : zone sans vent ; résulat : le bateau les contourne pour arriver au point final le plus rapidement possible.
-                                                                                  A améliorer : puissance de calcul --> le calcul des points peut devenir long.
+# Logiciel de Routage
 
-Notice du logiciel : 
-  - pour le vent:
-    - la composante u du vent correspond à la composante est/ouest du vent avec u positif signifiant un vent soufflant de l'est et négatif pour un vent souffant de l'ouest.
-    - la composante v du vent correspond à la composante nord/sud du vent avec u positif signifiant un vent soufflant du nord et négatif pour un vent souffant du sud.
-  - pour la partie routage : séléctionner une position initiale et une position finale. Faire bien attention à ce que ces positions existent dans le excel de vent et prendre
-    une carte de vent assez large pour que le bateau reste toujours dans une zone où le vent existe : sinon problème.
+## Description
 
+Ce logiciel permet de calculer et d'analyser des itinéraires en tenant compte des données de vent. Il est conçu pour aider à l'optimisation des trajets en mer ou dans les zones affectées par des conditions de vent variables.
 
-![Exemple de couverture](https://github.com/Tutur09/Logiciel_de_routage/raw/main/Exemple.png)
+## Fonctionnalités
 
+- Chargement de données de vent à partir de fichiers GRIB.
+- Visualisation des itinéraires avec des vecteurs de vent en temps réel.
+- Calcul d'itinéraires optimisés selon des paramètres définis par l'utilisateur.
+
+## Nouveautés
+
+### Ajouts récents (21 septembre 2024)
+
+- **Visualisation de la Route Idéale** : La fonction `enregistrement_route_avec_vent` a été ajoutée, permettant de tracer la route idéale heure par heure.
+- **Intégration des Vecteurs de Vent** : Chaque plot enregistré inclut les vecteurs de vent correspondant à l'heure choisie.
+- **Amélioration de l'Enregistrement** : Les plots sont maintenant sauvegardés dans un répertoire spécifié, avec des noms de fichiers indiquant l'heure.
+
+## Utilisation
+Me demander et pas évident d'installer cfgrib 
+
+## EXEMPLES
+![Carte de vent défini par l'utilisateur](https://github.com/Tutur09/Logiciel_de_routage/raw/main/Exemple.png)
+_Carte de vent défini par l'utilisateur_
+
+![Récupération du vent en temps réel grâçe aux fichiers GRIB de Météo Marine](https://github.com/Tutur09/Logiciel_de_routage/raw/main/route_ideale/route_ideale_vent_heure_18.png)
+_Récupération du vent en temps réel grâçe aux fichiers GRIB de Météo Marine_
