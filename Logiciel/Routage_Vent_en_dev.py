@@ -5,10 +5,12 @@ import pandas as pd
 from shapely.geometry import Point, MultiPoint
 from scipy.interpolate import griddata
 from cartopy import crs as ccrs, feature as cfeature
-from time import time
+from time import time, sleep
 import xarray as xr
 import os
 
+from shapely.geometry import Point
+from shapely.prepared import prep
 
 def generate_wind_map(lon_min, lon_max, lat_min, lat_max, grid_size, wind_strength_range, wind_angle_range):
 
@@ -174,8 +176,8 @@ def plot_wind(step_indices=[1], chemin_x=None, chemin_y=None, skip=4, save_plots
         plt.figure(figsize=(12, 7))  # Créer une nouvelle figure à chaque étape
 
         # Choisir une étape spécifique
-        u10_specific = ds['u10'].isel(step=step_index)
-        v10_specific = ds['v10'].isel(step=step_index)
+        u10_specific = ds['u10'].isel(step=int(step_index))
+        v10_specific = ds['v10'].isel(step=int(step_index))
 
         # Calculer la vitesse du vent
         wind_speed = np.sqrt(u10_specific**2 + v10_specific**2)
@@ -200,7 +202,7 @@ def plot_wind(step_indices=[1], chemin_x=None, chemin_y=None, skip=4, save_plots
         # Tracer les vecteurs de vent avec un échantillonnage, en fonction des latitudes et longitudes
         q = ax.quiver(ds['longitude'][::skip], ds['latitude'][::skip], 
                       u10_specific[::skip, ::skip], v10_specific[::skip, ::skip], 
-                      wind_speed[::skip, ::skip], scale=50, cmap='viridis', 
+                      wind_speed[::skip, ::skip], scale=30, cmap='viridis', 
                       transform=ccrs.PlateCarree())
 
         # Ajouter les titres et les étiquettes
@@ -232,19 +234,14 @@ def get_wind_from_grib(lat, lon, time_step=0):
     Récupère les composantes u10 et v10 du vent à partir du voisin le plus proche.
     """
     lon = lon % 360
-    start = time()
     
     # Maintenant, l'accès aux données sera plus rapide
-    u10_values = ds.u10.isel(step=time_step).values
-    v10_values = ds.v10.isel(step=time_step).values
-    stop1 = time()
-    #print(stop1 - start)
+    u10_values = ds.u10.isel(step=int(time_step)).values
+    v10_values = ds.v10.isel(step=int(time_step)).values
     
     latitudes = ds.latitude.values
     longitudes = ds.longitude.values
     
-    stop = time()
-    #print('temps récupérer une fois le vent ', stop - start)
     
     # Trouver le voisin le plus proche
     lat_diff = np.abs(latitudes - lat)
@@ -266,20 +263,21 @@ def get_wind_from_grib(lat, lon, time_step=0):
     
     return v_vent, a_vent
 
-def enregistrement_route(chemin_x, chemin_y, heures, output_dir='./', skip = 4):
+def enregistrement_route(chemin_x, chemin_y, pas_temporel, output_dir='./', skip = 4):
     
     # Créer le répertoire de sortie s'il n'existe pas
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
     point = 0
+    heure = 0
 
-    for heure in range(0, heures, 1):
+    for _ in range(0, len(chemin_x)):
         plt.figure(figsize=(12, 7)) 
 
         # Choisir les données de vent pour l'heure actuelle
-        u10_specific = ds['u10'].isel(step=heure)
-        v10_specific = ds['v10'].isel(step=heure)
+        u10_specific = ds['u10'].isel(step=int(heure))
+        v10_specific = ds['v10'].isel(step=int(heure))
         wind_speed = np.sqrt(u10_specific**2 + v10_specific**2)
 
         # Créer un sous-plot
@@ -317,17 +315,90 @@ def enregistrement_route(chemin_x, chemin_y, heures, output_dir='./', skip = 4):
         plt.savefig(plot_filename)
         print(f"Plot enregistré sous : {plot_filename}")
 
-        plt.close()  # Fermer la figure pour libérer la mémoire
-  
+        plt.close() 
+        heure += pas_temporel
+        
+def point_ini_fin():
+    points = []
+
+    def on_click(event):
+        if event.inaxes:
+            x, y = event.xdata, event.ydata
+            points.append((x, y))
+            print(f"Point sélectionné: x={x}, y={y}")
+
+            # Ajouter le point cliqué à la carte
+            ax.scatter(x, y, color='red', s=100, zorder=5, transform=ccrs.PlateCarree())
+            plt.draw()  # Mettre à jour le plot pour afficher le point
+
+            # Si 2 points sont sélectionnés, on garde la fenêtre ouverte mais on n'accepte plus de clics
+            if len(points) == 2:
+                fig.canvas.mpl_disconnect(cid)  # Déconnecter l'événement de clic après 2 points
+
+    fig, ax = plt.subplots(figsize=(12, 7), subplot_kw={'projection': ccrs.PlateCarree()})
+    
+    # Définir la zone d'intérêt
+    ax.set_extent([-10, -1, 43, 49.5], crs=ccrs.PlateCarree())
+    
+    # Ajouter des features de la carte
+    ax.coastlines()
+    ax.add_feature(cfeature.BORDERS, linestyle=':')
+    ax.add_feature(cfeature.LAND, facecolor='lightgray')
+    ax.add_feature(cfeature.OCEAN, facecolor='lightblue')
+    
+    # Tracer une grille de latitude/longitude
+    gl = ax.gridlines(draw_labels=True, color='gray', alpha=0.5, linestyle='--')
+    gl.top_labels = False
+    gl.right_labels = False
+
+    # Connecter l'événement de clic
+    cid = fig.canvas.mpl_connect('button_press_event', on_click)
+    
+    # Afficher la carte pour permettre la sélection des points
+    plt.title("Cliquez pour choisir le point de départ et le point final")
+    plt.show()
+    
+    # Retourner les coordonnées des deux points après fermeture de la fenêtre
+    if len(points) == 2:
+        return points[0], points[1]
+    else:
+        print("Sélection incomplète.")
+        return None
+
+def is_on_land(lon, lat):
+    """
+    Vérifie si un point (lon, lat) se trouve sur la terre ou sur la mer.
+    
+    Args:
+    - lon (float): Longitude du point
+    - lat (float): Latitude du point
+    
+    Returns:
+    - bool: True si le point est sur la terre, False sinon.
+    """
+    point = Point(lon, lat)
+    
+    # Vérifier si le point se trouve dans un des polygones représentant la terre
+    for geom in prepared_land:
+        if geom.contains(point):
+            return True
+    return False
+
+ 
   
 #Chemin d'accès du fichier GRIB    
 file_path = 'C:/Users/arthu/OneDrive/Arthur/Programmation/TIPE_Arthur_Lhoste/Logiciel/Données_vent/METEOCONSULT12Z_VENT_0921_Gascogne.grb'
 file_path_courant = 'C:/Users/arthu/OneDrive/Arthur/Programmation/TIPE_Arthur_Lhoste/Logiciel/Données_vent/METEOCONSULT00Z_COURANT_0921_Gascogne.grb'
 
-# Charger le dataset
+# Charger les dataset
 ds = xr.open_dataset(file_path, engine='cfgrib')
 ds_ = xr.open_dataset(file_path_courant, engine = 'cfgrib')
 
 # Charger les données u10 et v10 pour tout le dataset comme ça pas besoin de recalculer --> gain de temps considérable
 ds.u10.load()
 ds.v10.load()
+
+
+land_feature = cfeature.NaturalEarthFeature('physical', 'land', '50m')
+land_geom = list(land_feature.geometries())
+prepared_land = [prep(geom) for geom in land_geom]

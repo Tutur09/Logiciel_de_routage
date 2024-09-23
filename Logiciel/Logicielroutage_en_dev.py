@@ -13,6 +13,7 @@ import os
 import Routage_Vent_en_dev as rv
 
 
+
 def projection(position, cap, distance):
     long_ini = position[0]
     lat_ini = position[1]
@@ -46,10 +47,14 @@ def projection(position, cap, distance):
 
 def prochains_points(position, pol_v_vent, d_vent, pas_temporel, pas_angle):
     liste_points = []
+    start =time.time()
+
     chemin = list(range(0, 360, pas_angle))
     for angle in chemin:
         v_bateau = recup_vitesse_fast(pol_v_vent, d_vent - angle)
         liste_points.append(projection(position, angle, v_bateau * pas_temporel))
+    stop = time.time()
+    #print(stop - start)
     return liste_points
 
 def prochains_points_liste_parent_enfants(liste, pas_temporel, pas_angle, filtrer_par_distance=False, point_arrivee=None, heure = 0):
@@ -84,24 +89,24 @@ def prochains_points_liste_parent_enfants(liste, pas_temporel, pas_angle, filtre
         stop1 = time.time()
         temps += (stop1 - start1)
 
-        
-        pol_v_vent = polaire(v_vent)
-
         start2 = time.time()
-        enfants = prochains_points((lon,lat), pol_v_vent, d_vent, pas_temporel, pas_angle)
+        pol_v_vent = polaire(v_vent)
         stop2 = time.time()
-        temps2 += stop2 - start1
+        temps2 += stop2 - start2
+
+        enfants = prochains_points((lon,lat), pol_v_vent, d_vent, pas_temporel, pas_angle)
+
         
         
 
         # Filtrer les enfants selon la distance au point d'arrivée
         if filtrer_par_distance and point_arrivee is not None:
-            enfants = [enfant for enfant in enfants if plus_proche_que_parent(point_arrivee, (lon,lat), enfant)]
+            enfants = [enfant for enfant in enfants if plus_proche_que_parent(point_arrivee, (lon,lat), enfant)] #and not rv.is_on_land(enfant[0], enfant[1])]
 
 
         liste_rendu.append([(lon,lat), enfants])
-    print("temps_ get_wind ", temps)
-    print("temps prochain_points", temps2)
+    #print("temps_ get_wind ", temps)
+    #print("temps polaire", temps2)
 
     return liste_rendu
 
@@ -113,9 +118,6 @@ def plus_proche_que_parent(point_arrivee, pos_parent, pos_enfant):
 def polaire(vitesse_vent):
     polaire = pd.read_csv('Sunfast3600.pol', delimiter=r'\s+', index_col=0)
     liste_vitesse = polaire.columns
-
-    #print(f"Vitesse vent demandée : {vitesse_vent}")
-    #print(f"Vitesses disponibles dans la polaire : {liste_vitesse}")
 
     i = 0
     while i < len(liste_vitesse):
@@ -253,7 +255,7 @@ def itere_jusqua_dans_enveloppe(position_initiale, position_finale, pas_temporel
         
         points_aplatis = flatten_list(liste_parents_enfants)
         
-        enveloppe_concave = forme_concave(points_aplatis,5)#forme_concave(points_aplatis,3.0)
+        enveloppe_concave = forme_concave(points_aplatis,5)
 
         if live:
             plot_points(liste_parents_enfants, enveloppe_concave, position_finale)
@@ -311,7 +313,7 @@ def itere_jusqua_dans_enveloppe(position_initiale, position_finale, pas_temporel
     
     if enregistrement == True:
         lien_dossier = r"C:\Users\arthu\OneDrive\Arthur\Programmation\TIPE_Arthur_Lhoste\route_ideale"
-        rv.enregistrement_route(chemin_x, chemin_y, heure, output_dir=lien_dossier)    
+        rv.enregistrement_route(chemin_x, chemin_y, pas_temporel, output_dir=lien_dossier)    
     
     return liste_parents_enfants
 
