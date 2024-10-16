@@ -13,7 +13,6 @@ import os
 import Routage_Vent_en_dev as rv
 
 
-
 def projection(position, cap, distance):
     long_ini = position[0]
     lat_ini = position[1]
@@ -105,8 +104,8 @@ def prochains_points_liste_parent_enfants(liste, pas_temporel, pas_angle, filtre
 
 
         liste_rendu.append([(lon,lat), enfants])
-    #print("temps_ get_wind ", temps)
-    #print("temps polaire", temps2)
+    print("temps_ get_wind ", temps)
+    print("temps polaire", temps2)
 
     return liste_rendu
 

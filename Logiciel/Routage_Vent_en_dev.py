@@ -5,6 +5,8 @@ import pandas as pd
 from shapely.geometry import Point, MultiPoint
 from scipy.interpolate import griddata
 from cartopy import crs as ccrs, feature as cfeature
+from scipy.spatial import cKDTree
+
 from time import time, sleep
 import xarray as xr
 import os
@@ -235,7 +237,6 @@ def get_wind_from_grib(lat, lon, time_step=0):
     """
     lon = lon % 360
     
-    # Maintenant, l'accès aux données sera plus rapide
     u10_values = ds.u10.isel(step=int(time_step)).values
     v10_values = ds.v10.isel(step=int(time_step)).values
     
@@ -387,7 +388,7 @@ def is_on_land(lon, lat):
  
   
 #Chemin d'accès du fichier GRIB    
-file_path = 'C:/Users/arthu/OneDrive/Arthur/Programmation/TIPE_Arthur_Lhoste/Logiciel/Données_vent/METEOCONSULT12Z_VENT_0921_Gascogne.grb'
+file_path = 'C:/Users/arthu/OneDrive/Arthur/Programmation/TIPE_Arthur_Lhoste/Logiciel/Données_vent/METEOCONSULT12Z_VENT_0925_Gascogne.grb'
 file_path_courant = 'C:/Users/arthu/OneDrive/Arthur/Programmation/TIPE_Arthur_Lhoste/Logiciel/Données_vent/METEOCONSULT00Z_COURANT_0921_Gascogne.grb'
 
 # Charger les dataset
@@ -395,8 +396,8 @@ ds = xr.open_dataset(file_path, engine='cfgrib')
 ds_ = xr.open_dataset(file_path_courant, engine = 'cfgrib')
 
 # Charger les données u10 et v10 pour tout le dataset comme ça pas besoin de recalculer --> gain de temps considérable
-ds.u10.load()
-ds.v10.load()
+#ds.u10.load()
+#ds.v10.load()
 
 
 land_feature = cfeature.NaturalEarthFeature('physical', 'land', '50m')

@@ -1,0 +1,196 @@
+import numpy as np
+import xarray as xr
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Charger le fichier GRIB
+file_path = 'C:/Users/arthu/OneDrive/Arthur/Programmation/TIPE_Arthur_Lhoste/Logiciel/Données_vent/METEOCONSULT12Z_VENT_0925_Gascogne.grb'
+ds = xr.open_dataset(file_path, engine='cfgrib')
+
+# Récupérer les dimensions de la grille
+lon = ds.longitude.values
+lat = ds.latitude.values
+time_steps = ds.step.size
+
+# Initialiser le tableau 2D pour les données de vent [vitesse, angle]
+wind_data = np.zeros((len(lat), len(lon), 2))  # Pas de dimension temporelle ici
+
+# Fonction pour récupérer la vitesse et l'angle du vent
+def get_wind_at_point(lat_idx, lon_idx, time_step=0):
+    """
+    Récupère la vitesse et l'angle du vent à un point (lat_idx, lon_idx) donné.
+    """
+    u10 = ds.u10.isel(step=time_step).isel(latitude=lat_idx, longitude=lon_idx).values
+    v10 = ds.v10.isel(step=time_step).isel(latitude=lat_idx, longitude=lon_idx).values
+    
+    # Calcul de la vitesse et de l'angle
+    v_vent = np.sqrt(u10**2 + v10**2)
+    a_vent = np.degrees(np.arctan2(v10, u10)) % 360
+
+    return v_vent, a_vent
+
+# Remplir le tableau de données de vent pour un time_step donné
+def fill_wind_data(time_step=0):
+    """
+    Remplit le tableau de données de vent (vitesse et angle) pour toutes les coordonnées (lat, lon)
+    à l'instant spécifié (time_step). Les données u10 et v10 sont chargées une seule fois pour améliorer les performances.
+    """
+    # Charger les données u10 et v10 une seule fois pour le time_step donné
+    u10_values = ds.u10.isel(step=time_step).values  # Tableau 2D des composantes u10 [lat, lon]
+    v10_values = ds.v10.isel(step=time_step).values  # Tableau 2D des composantes v10 [lat, lon]
+
+    # Calculer la vitesse et l'angle du vent pour toutes les coordonnées (vectorisé)
+    v_vent = np.sqrt(u10_values**2 + v10_values**2)  # Vitesse du vent
+    a_vent = np.degrees(np.arctan2(v10_values, u10_values)) % 360  # Angle du vent
+
+    # Remplir le tableau wind_data avec les valeurs calculées
+    wind_data[..., 0] = v_vent  # Stocker la vitesse
+    wind_data[..., 1] = a_vent  # Stocker l'angle
+
+# Fonctions ajoutées : polaire et recup_vitesse_fast
+def polaire(vitesse_vent):
+    """
+    Renvoie la polaire de vitesse pour une vitesse de vent donnée, avec interpolation linéaire si nécessaire.
+    """
+    polaire = pd.read_csv('Sunfast3600.pol', delimiter=r'\s+', index_col=0)
+    liste_vitesse = polaire.columns
+
+    i = 0
+    while i < len(liste_vitesse):
+        vitesse = float(liste_vitesse[i])
+        if vitesse == vitesse_vent:
+            return polaire[liste_vitesse[i]]
+        elif vitesse > vitesse_vent:
+            inf = i - 1
+            sup = i
+            t = (vitesse_vent - float(liste_vitesse[inf])) / (float(liste_vitesse[sup]) - float(liste_vitesse[inf]))
+            return t * polaire[liste_vitesse[inf]] + (1 - t) * polaire[liste_vitesse[sup]]
+        i += 1
+    print('Erreur vitesse de vent')
+    return None
+
+def recup_vitesse_fast(pol_v_vent, angle):
+    """
+    Récupère la vitesse du bateau en fonction de la polaire du vent et de l'angle par rapport au vent.
+    """
+    if pol_v_vent is None:
+        raise ValueError("Erreur : pol_v_vent est None, vérifiez la vitesse du vent.")
+    
+    angle = abs(angle)
+    if angle > 180:
+        angle = 360 - angle
+
+    liste_angle = pol_v_vent.index
+
+    i = 0
+    while i < len(pol_v_vent):
+        angle_vent = float(liste_angle[i])
+        if angle == angle_vent:
+            return pol_v_vent[liste_angle[i]]
+        elif angle_vent > angle:
+            inf = i - 1
+            sup = i
+            t = (angle - float(liste_angle[inf])) / (float(liste_angle[sup]) - float(liste_angle[inf]))
+            return t * pol_v_vent[liste_angle[inf]] + (1 - t) * pol_v_vent[liste_angle[sup]]
+        i += 1
+    print('Erreur angle')
+    return None
+
+# Navigation améliorée avec polaire de vitesse
+def calculate_travel_time(start, end, wind):
+    """
+    Calcule le temps de trajet entre deux points, en fonction de la vitesse du vent et de la polaire du bateau.
+    """
+    distance = np.linalg.norm(np.array(end) - np.array(start))
+    v_vent, a_vent = wind
+    pol_v_vent = polaire(v_vent)  # Polaire du bateau pour la vitesse de vent donnée
+    v_bateau = recup_vitesse_fast(pol_v_vent, a_vent)  # Vitesse du bateau pour l'angle donné
+
+    return distance / v_bateau if v_bateau > 0 else np.inf
+
+def get_possible_moves(position):
+    """
+    Renvoie les mouvements possibles (haut, bas, gauche, droite).
+    """
+    x, y = position
+    moves = [(x+1, y), (x-1, y), (x, y+1), (x, y-1)]
+    # Filtrer les mouvements hors de la grille
+    return [(nx, ny) for nx, ny in moves if 0 <= nx < len(lat) and 0 <= ny < len(lon)]
+
+def navigate(start, goal, wind_data, time_step=0):
+    """
+    Navigation d'un point de départ à un point d'arrivée en minimisant le temps de trajet, avec polaire de vitesse.
+    """
+    current_position = start
+    path = [start]
+    
+    while current_position != goal:
+        current_wind = wind_data[current_position[0], current_position[1]]
+        possible_moves = get_possible_moves(current_position)
+
+        # Trouver le mouvement qui minimise le temps de trajet
+        best_move = min(possible_moves, key=lambda move: calculate_travel_time(current_position, move, current_wind))
+        
+        path.append(best_move)
+        current_position = best_move
+        
+    return path
+
+# Visualisation du champ de vent et du chemin parcouru
+def plot_wind_and_path(wind_data, path, time_step=0):
+    # Extraire les composants u et v du vent
+    v_wind = wind_data[..., 0]  # Vitesse
+    a_wind = wind_data[..., 1]  # Angle
+    u_wind = v_wind * np.cos(np.radians(a_wind))
+    v_wind = v_wind * np.sin(np.radians(a_wind))
+
+    # Créer une grille pour le tracé
+    lon_grid, lat_grid = np.meshgrid(lon, lat)
+
+    plt.figure(figsize=(10, 7))
+    plt.quiver(lon_grid, lat_grid, u_wind, v_wind, color='blue', scale=500)
+
+    # Tracer le chemin du bateau
+    path = np.array(path)
+    plt.plot(lon[path[:, 1]], lat[path[:, 0]], color='red', marker='o', label='Trajet')
+
+    plt.title('Champ de vent et trajet du bateau')
+    plt.xlabel('Longitude')
+    plt.ylabel('Latitude')
+    plt.legend()
+    plt.grid()
+    plt.show()
+
+def plot_wind(wind_data, time_step=0):
+    # Extraire les composants u et v du vent
+    v_wind = wind_data[..., 0]  # Vitesse
+    a_wind = wind_data[..., 1]  # Angle
+    u_wind = v_wind * np.cos(np.radians(a_wind))
+    v_wind = v_wind * np.sin(np.radians(a_wind))
+
+    # Créer une grille pour le tracé
+    lon_grid, lat_grid = np.meshgrid(lon, lat)
+
+    plt.figure(figsize=(10, 7))
+    plt.quiver(lon_grid, lat_grid, u_wind, v_wind, color='blue', scale=500)
+
+
+    plt.title('Champ de vent')
+    plt.xlabel('Longitude')
+    plt.ylabel('Latitude')
+    plt.legend()
+    plt.grid()
+    plt.show()
+
+# Exemple d'utilisation
+start_position = (0, 0)  # Départ
+goal_position = (9, 9)  # Arrivée
+
+# Remplir les données de vent pour le time_step 0
+fill_wind_data(time_step=0)
+
+# Calculer le chemin
+#path = navigate(start_position, goal_position, wind_data)
+
+# Visualiser le champ de vent et le chemin
+plot_wind(wind_data, time_step=0)
