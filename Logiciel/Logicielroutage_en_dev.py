@@ -84,8 +84,8 @@ def prochains_points_liste_parent_enfants(liste, pas_temporel, pas_angle, filtre
         # Obtenir la direction et la force du vent pour la position actuelle      
         start1 = time.time()
         v_vent, d_vent = rv.get_wind_from_grib(lat, lon, heure)
-
         stop1 = time.time()
+        
         temps += (stop1 - start1)
 
         start2 = time.time()
@@ -104,7 +104,7 @@ def prochains_points_liste_parent_enfants(liste, pas_temporel, pas_angle, filtre
 
 
         liste_rendu.append([(lon,lat), enfants])
-    print("temps_ get_wind ", temps)
+    print("temps get_wind ", temps)
     print("temps polaire", temps2)
 
     return liste_rendu
@@ -131,6 +131,7 @@ def polaire(vitesse_vent):
         i += 1
     print('Erreur vitesse de vent')
     return None
+
 
 def recup_vitesse_fast(pol_v_vent, angle):
     if pol_v_vent is None:

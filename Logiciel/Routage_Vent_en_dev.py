@@ -5,7 +5,7 @@ import pandas as pd
 from shapely.geometry import Point, MultiPoint
 from scipy.interpolate import griddata
 from cartopy import crs as ccrs, feature as cfeature
-from scipy.spatial import cKDTree
+from scipy.spatial import KDTree
 
 from time import time, sleep
 import xarray as xr
@@ -231,38 +231,39 @@ def plot_wind(step_indices=[1], chemin_x=None, chemin_y=None, skip=4, save_plots
         if not save_plots:
             plt.show()  # Afficher les plots
         
+
 def get_wind_from_grib(lat, lon, time_step=0):
     """
     Récupère les composantes u10 et v10 du vent à partir du voisin le plus proche.
     """
+    
     lon = lon % 360
     
-    u10_values = ds.u10.isel(step=int(time_step)).values
-    v10_values = ds.v10.isel(step=int(time_step)).values
+    # Utiliser les valeurs de u10 et v10 préchargées
+    u10_time_step = u10_values[time_step]
+    v10_time_step = v10_values[time_step]
     
     latitudes = ds.latitude.values
     longitudes = ds.longitude.values
     
-    
-    # Trouver le voisin le plus proche
+    # Calculer les différences de latitude et longitude
     lat_diff = np.abs(latitudes - lat)
     lon_diff = np.abs(longitudes - lon)
-       
-    # Calculer les distances
-    distances = lat_diff[:, None]**2 + lon_diff**2  # Matrice des distances
+    
+    # Calcul des distances et index du voisin le plus proche
+    distances = lat_diff[:, None]**2 + lon_diff**2
     closest_index = np.unravel_index(np.argmin(distances), distances.shape)
     
+    # Récupération des valeurs pour le voisin le plus proche
+    u10 = u10_time_step[closest_index]
+    v10 = v10_time_step[closest_index]
     
-    # Récupérer les valeurs du voisin le plus proche
-    u10 = u10_values[closest_index]
-    v10 = v10_values[closest_index]
-    
-    # Calculer la vitesse et l'angle
+    # Calcul de la vitesse et de l'angle
     v_vent = np.sqrt((u10)**2 + v10**2) 
     a_vent = (np.degrees(np.arctan2(-u10, -v10))) % 360 
     
-    
     return v_vent, a_vent
+
 
 def enregistrement_route(chemin_x, chemin_y, pas_temporel, output_dir='./', skip = 4):
     
@@ -395,9 +396,9 @@ file_path_courant = 'C:/Users/arthu/OneDrive/Arthur/Programmation/TIPE_Arthur_Lh
 ds = xr.open_dataset(file_path, engine='cfgrib')
 ds_ = xr.open_dataset(file_path_courant, engine = 'cfgrib')
 
-# Charger les données u10 et v10 pour tout le dataset comme ça pas besoin de recalculer --> gain de temps considérable
-#ds.u10.load()
-#ds.v10.load()
+# Charger les valeurs de u10 et v10 au début comme ça pas besoin de le recalculer à chaque fois qu'on éxecute la fonction
+u10_values = [ds.u10.isel(step=int(step)).values for step in range(ds.dims['step'])]
+v10_values = [ds.v10.isel(step=int(step)).values for step in range(ds.dims['step'])]
 
 
 land_feature = cfeature.NaturalEarthFeature('physical', 'land', '50m')
