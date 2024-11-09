@@ -1,0 +1,46 @@
+from shapely.geometry import Point, LineString, Polygon, MultiPolygon
+from shapely.strtree import STRtree
+from scipy.spatial import KDTree
+import geopandas as gpd
+
+
+# Charger et simplifier les points centraux des polygones
+land_polygons = gpd.read_file(r"C:\Users\arthu\OneDrive\Arthur\Programmation\TIPE_Arthur_Lhoste\Logiciel\Carte_frontières_terrestre\ne_50m_land.shp")
+
+# Créer un index spatial
+land_polygons_sindex = land_polygons.sindex
+
+def is_on_land(point):
+    """
+    Détermine si un point est sur la terre ou sur la mer en utilisant un index spatial.
+
+    Args:
+    - point (tuple): Coordonnées (longitude, latitude) du point à vérifier.
+
+    Returns:
+    - bool: True si le point est sur la terre, False si le point est en mer.
+    """
+    point_geom = Point(point[0], point[1])
+
+    # Rechercher les polygones proches à l'aide de l'index spatial
+    possible_matches_index = list(land_polygons_sindex.intersection(point_geom.bounds))
+    possible_matches = land_polygons.iloc[possible_matches_index]
+
+    # Vérifier si le point est contenu dans l'un des polygones proches
+    for polygon in possible_matches.geometry:
+        if polygon.contains(point_geom):
+            return True  # Le point est sur la terre
+
+    return False  # Le point est en mer
+
+# Points de test
+test_points = [
+    (-4.5, 48.5),   # En mer (près des côtes)
+    (2.35, 48.85),  # Sur terre (Paris)
+    (-30.0, 40.0)   # En plein océan Atlantique
+]
+
+# Test de chaque point
+for point in test_points:
+    result = is_on_land(point)
+    print(f"Point {point} est sur terre : {result}")

@@ -2,17 +2,24 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-from shapely.geometry import Point, MultiPoint
-from scipy.interpolate import griddata
-from cartopy import crs as ccrs, feature as cfeature
-from scipy.spatial import KDTree
-
 from time import time, sleep
-import xarray as xr
 import os
 
-from shapely.geometry import Point
+from scipy.interpolate import griddata
+from scipy.spatial import KDTree
+
+from cartopy import crs as ccrs, feature as cfeature
+
+from shapely.strtree import STRtree
+from shapely.geometry import GeometryCollection, Polygon, Point, MultiPolygon, LineString
 from shapely.prepared import prep
+from shapely.ops import nearest_points
+from geopy.distance import geodesic
+
+
+
+import geopandas as gpd
+import xarray as xr
 
 def generate_wind_map(lon_min, lon_max, lat_min, lat_max, grid_size, wind_strength_range, wind_angle_range):
 
@@ -62,7 +69,7 @@ def excel2wind_map():
     u_values = np.array(u_values)
     v_values = np.array(v_values)
 
-    # Créer les grilles de coordonnées (longitude et latitude)
+    # Création des grilles de coordonnées (longitude et latitude)
     lon_grid, lat_grid = np.meshgrid(
         np.linspace(lon_min, lon_max, u_values.shape[1]),
         np.linspace(lat_max, lat_min, u_values.shape[0])
@@ -172,42 +179,42 @@ def plot_wind_map(lon_grid, lat_grid, u, v, pos_i, pos_f, chemin_x=None, chemin_
     ax.legend()
     plt.show()
 
-def plot_wind(step_indices=[1], chemin_x=None, chemin_y=None, skip=4, save_plots=False, output_dir=r'C:\Users\arthu\OneDrive\Arthur\Programmation\TIPE_Arthur_Lhoste\images_png'):
-    # Créer une figure pour les plots
+def plot_wind(loc, step_indices=[1], chemin_x=None, chemin_y=None, skip=4, save_plots=False, output_dir=r'C:\Users\arthu\OneDrive\Arthur\Programmation\TIPE_Arthur_Lhoste\images_png'):
+    # Créer une figure pour chaque étape spécifiée dans step_indices
     for step_index in step_indices:
         plt.figure(figsize=(12, 7))  # Créer une nouvelle figure à chaque étape
 
-        # Choisir une étape spécifique
+        # Choisir une étape spécifique dans les données de vent
         u10_specific = ds['u10'].isel(step=int(step_index))
         v10_specific = ds['v10'].isel(step=int(step_index))
 
-        # Calculer la vitesse du vent
+        # Calculer la vitesse du vent pour chaque point
         wind_speed = np.sqrt(u10_specific**2 + v10_specific**2)
 
-        # Créer un sous-plot pour chaque étape
+        # Création du sous-plot avec une projection cartographique et un fond de carte à résolution de 50 m
         ax = plt.subplot(1, 1, 1, projection=ccrs.PlateCarree())
-        ax.set_extent([-10, -1, 43.2, 49], crs=ccrs.PlateCarree())  # Ajuste ces valeurs en fonction de ta zone d'intérêt
+        ax.set_extent(loc, crs=ccrs.PlateCarree())  # Zone d'intérêt avec haute précision
 
-        # Ajouter des features de la carte
-        ax.coastlines()
-        ax.add_feature(cfeature.BORDERS, linestyle=':')
-        ax.add_feature(cfeature.LAND, facecolor='lightgray')
-        ax.add_feature(cfeature.OCEAN, facecolor='lightblue')
+        # Ajouter les éléments de carte à résolution de 50 m
+        ax.add_feature(cfeature.COASTLINE.with_scale('50m'), linewidth=1)
+        ax.add_feature(cfeature.BORDERS.with_scale('50m'), linestyle=':')
+        ax.add_feature(cfeature.LAND.with_scale('50m'), facecolor='lightgray')
+        ax.add_feature(cfeature.OCEAN.with_scale('50m'), facecolor='lightblue')
 
-        # Tracer la grille de latitudes et longitudes
+        # Tracer la grille de latitude et de longitude
         gl = ax.gridlines(draw_labels=True, color='gray', alpha=0.5, linestyle='--')
         gl.top_labels = False  # Désactive les labels en haut
         gl.right_labels = False  # Désactive les labels à droite
-        gl.xlabel_style = {'size': 10}  # Taille du texte pour les longitudes
-        gl.ylabel_style = {'size': 10}  # Taille du texte pour les latitudes
+        gl.xlabel_style = {'size': 10} 
+        gl.ylabel_style = {'size': 10}  
 
-        # Tracer les vecteurs de vent avec un échantillonnage, en fonction des latitudes et longitudes
+        # Tracer les vecteurs de vent (u, v) avec un échantillonnage `skip` pour une meilleure lisibilité
         q = ax.quiver(ds['longitude'][::skip], ds['latitude'][::skip], 
                       u10_specific[::skip, ::skip], v10_specific[::skip, ::skip], 
                       wind_speed[::skip, ::skip], scale=30, cmap='viridis', 
                       transform=ccrs.PlateCarree())
 
-        # Ajouter les titres et les étiquettes
+        # Ajouter un titre et des étiquettes
         ax.set_title(f"Carte des vents - Étape {step_index}")
         ax.set_xlabel('Longitude')
         ax.set_ylabel('Latitude')
@@ -220,18 +227,18 @@ def plot_wind(step_indices=[1], chemin_x=None, chemin_y=None, skip=4, save_plots
             ax.plot(chemin_x, chemin_y, color='black', linestyle='-', linewidth=2, label='Chemin Idéal', transform=ccrs.PlateCarree())
             ax.scatter(chemin_x, chemin_y, color='black', s=50, label='Points du Chemin', transform=ccrs.PlateCarree())
 
-        # Enregistrer le plot si l'option save_plots est activée
+        # Enregistrer le plot si l'option `save_plots` est activée
         if save_plots:
-            plot_filename = f"{output_dir}/carte_vents_step_{step_index}.png"
+            os.makedirs(output_dir, exist_ok=True)  # Créer le répertoire si nécessaire
+            plot_filename = os.path.join(output_dir, f"carte_vents_step_{step_index}.png")
             plt.savefig(plot_filename)
             print(f"Plot enregistré sous : {plot_filename}")
 
         plt.tight_layout()
-         # Montrer les plots seulement si save_plots est False
+        # Montrer les plots seulement si `save_plots` est False
         if not save_plots:
             plt.show()  # Afficher les plots
-        
-
+    
 def get_wind_from_grib(lat, lon, time_step=0):
     """
     Récupère les composantes u10 et v10 du vent à partir du voisin le plus proche.
@@ -264,8 +271,7 @@ def get_wind_from_grib(lat, lon, time_step=0):
     
     return v_vent, a_vent
 
-
-def enregistrement_route(chemin_x, chemin_y, pas_temporel, output_dir='./', skip = 4):
+def enregistrement_route(chemin_x, chemin_y, pas_temporel, loc, output_dir='./', skip = 4):
     
     # Créer le répertoire de sortie s'il n'existe pas
     if not os.path.exists(output_dir):
@@ -284,7 +290,7 @@ def enregistrement_route(chemin_x, chemin_y, pas_temporel, output_dir='./', skip
 
         # Créer un sous-plot
         ax = plt.subplot(1, 1, 1, projection=ccrs.PlateCarree())
-        ax.set_extent([-10, -1, 43.2, 49], crs=ccrs.PlateCarree())
+        ax.set_extent(loc, crs=ccrs.PlateCarree())
 
         # Ajouter des features de la carte
         ax.coastlines()
@@ -320,7 +326,7 @@ def enregistrement_route(chemin_x, chemin_y, pas_temporel, output_dir='./', skip
         plt.close() 
         heure += pas_temporel
         
-def point_ini_fin():
+def point_ini_fin(loc):
     points = []
 
     def on_click(event):
@@ -329,22 +335,22 @@ def point_ini_fin():
             points.append((x, y))
             print(f"Point sélectionné: x={x}, y={y}")
 
-            # Ajouter le point cliqué à la carte
+            # On ajoute les points une fois cliqué
             ax.scatter(x, y, color='red', s=100, zorder=5, transform=ccrs.PlateCarree())
-            plt.draw()  # Mettre à jour le plot pour afficher le point
+            plt.draw()  
 
-            # Si 2 points sont sélectionnés, on garde la fenêtre ouverte mais on n'accepte plus de clics
+            # Pas plus de deux points
             if len(points) == 2:
-                fig.canvas.mpl_disconnect(cid)  # Déconnecter l'événement de clic après 2 points
+                fig.canvas.mpl_disconnect(cid)  
 
     fig, ax = plt.subplots(figsize=(12, 7), subplot_kw={'projection': ccrs.PlateCarree()})
     
-    # Définir la zone d'intérêt
-    ax.set_extent([-10, -1, 43, 49.5], crs=ccrs.PlateCarree())
+    # Localisation de la carte
+    ax.set_extent(loc, crs=ccrs.PlateCarree())
     
-    # Ajouter des features de la carte
-    ax.coastlines()
-    ax.add_feature(cfeature.BORDERS, linestyle=':')
+    # Paramètre de résolution
+    ax.add_feature(cfeature.COASTLINE.with_scale('50m'), linewidth=1)
+    ax.add_feature(cfeature.BORDERS.with_scale('50m'), linestyle=':')
     ax.add_feature(cfeature.LAND, facecolor='lightgray')
     ax.add_feature(cfeature.OCEAN, facecolor='lightblue')
     
@@ -356,51 +362,62 @@ def point_ini_fin():
     # Connecter l'événement de clic
     cid = fig.canvas.mpl_connect('button_press_event', on_click)
     
-    # Afficher la carte pour permettre la sélection des points
     plt.title("Cliquez pour choisir le point de départ et le point final")
     plt.show()
     
-    # Retourner les coordonnées des deux points après fermeture de la fenêtre
     if len(points) == 2:
         return points[0], points[1]
     else:
         print("Sélection incomplète.")
         return None
 
-def is_on_land(lon, lat):
+def is_on_land(segment):
     """
-    Vérifie si un point (lon, lat) se trouve sur la terre ou sur la mer.
-    
-    Args:
-    - lon (float): Longitude du point
-    - lat (float): Latitude du point
-    
-    Returns:
-    - bool: True si le point est sur la terre, False sinon.
-    """
-    point = Point(lon, lat)
-    
-    # Vérifier si le point se trouve dans un des polygones représentant la terre
-    for geom in prepared_land:
-        if geom.contains(point):
-            return True
-    return False
+    Vérifie si un segment coupe la terre, en excluant les polygones trop éloignés.
 
- 
+    Args:
+    - segment (LineString): Segment représenté sous forme de LineString.
+    - land_polygons_sindex: Index spatial des polygones de terre.
+    - land_polygons: Polygones de terre.
+    - distance_threshold (float): Seuil de distance en kilomètres pour éviter les polygones lointains.
+
+    Returns:
+    - bool: True si le segment coupe la terre, False sinon.
+    """
+    # Calculer les points les plus proches pour le filtrage
+    start, end = segment.coords[0], segment.coords[1]
+    segment_midpoint = ((start[0] + end[0]) / 2, (start[1] + end[1]) / 2)
+
+    possible_matches_index = list(land_polygons_sindex.intersection(segment.bounds))
+    possible_matches = land_polygons.iloc[possible_matches_index]
+
+    for polygon in possible_matches.geometry:
+        # Vérification rapide de distance
+        nearest = nearest_points(segment, polygon)
+        if geodesic((nearest[0].y, nearest[0].x), (nearest[1].y, nearest[1].x)).km > 10:
+            continue  # Passer aux autres polygones si trop éloigné
+
+        # Vérification de l'intersection précise si proche
+        if segment.intersects(polygon):
+            return True
+
+    return False
   
-#Chemin d'accès du fichier GRIB    
-file_path = 'C:/Users/arthu/OneDrive/Arthur/Programmation/TIPE_Arthur_Lhoste/Logiciel/Données_vent/METEOCONSULT12Z_VENT_0925_Gascogne.grb'
+#Chemin d'accès du fichier GRIB vent et courant (pas encore fait)
+file_path = 'C:/Users/arthu/OneDrive/Arthur/Programmation/TIPE_Arthur_Lhoste/Logiciel/Données_vent/METEOCONSULT12Z_VENT_1105_Gascogne.grb'
 file_path_courant = 'C:/Users/arthu/OneDrive/Arthur/Programmation/TIPE_Arthur_Lhoste/Logiciel/Données_vent/METEOCONSULT00Z_COURANT_0921_Gascogne.grb'
 
-# Charger les dataset
+# On charge les datasets
 ds = xr.open_dataset(file_path, engine='cfgrib')
 ds_ = xr.open_dataset(file_path_courant, engine = 'cfgrib')
 
-# Charger les valeurs de u10 et v10 au début comme ça pas besoin de le recalculer à chaque fois qu'on éxecute la fonction
+# On charges les composantes u10 et v10 du vent au début comme ça pas besoin de le recalculer à chaque fois qu'on éxecute la fonction
 u10_values = [ds.u10.isel(step=int(step)).values for step in range(ds.dims['step'])]
 v10_values = [ds.v10.isel(step=int(step)).values for step in range(ds.dims['step'])]
 
+"CE QUI SUIT EST POUR LA FONCTION IS_ONLAND"
 
-land_feature = cfeature.NaturalEarthFeature('physical', 'land', '50m')
-land_geom = list(land_feature.geometries())
-prepared_land = [prep(geom) for geom in land_geom]
+# Charger et simplifier les points centraux des polygones
+land_polygons = gpd.read_file(r"C:\Users\arthu\OneDrive\Arthur\Programmation\TIPE_Arthur_Lhoste\Logiciel\Carte_frontières_terrestre\ne_50m_land.shp")
+land_polygons_sindex = land_polygons.sindex
+

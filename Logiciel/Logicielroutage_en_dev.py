@@ -1,14 +1,14 @@
 import numpy as np
-import math
-import matplotlib.pyplot as plt
 import pandas as pd
-from matplotlib.path import Path
-import alphashape
-from shapely.geometry import Point, MultiPoint
+import math
 import time
-import xarray as xr
+
+import matplotlib.pyplot as plt
+from matplotlib.path import Path
+
+import alphashape
+from shapely.geometry import Point, MultiPoint, LineString
 from cartopy import crs as ccrs, feature as cfeature
-import os
 
 import Routage_Vent_en_dev as rv
 
@@ -79,6 +79,7 @@ def prochains_points_liste_parent_enfants(liste, pas_temporel, pas_angle, filtre
 
     temps = 0
     temps2 = 0
+    temps3 = 0
     for lon,lat in liste:
         #lon, lat = parent
         # Obtenir la direction et la force du vent pour la position actuelle      
@@ -99,13 +100,23 @@ def prochains_points_liste_parent_enfants(liste, pas_temporel, pas_angle, filtre
         
 
         # Filtrer les enfants selon la distance au point d'arrivée
-        if filtrer_par_distance and point_arrivee is not None:
-            enfants = [enfant for enfant in enfants if plus_proche_que_parent(point_arrivee, (lon,lat), enfant)] #and not rv.is_on_land(enfant[0], enfant[1])]
+        start3 = time.time()
+        
+        parent_point = (lon, lat)
 
+        if filtrer_par_distance and point_arrivee is not None:
+            enfants = [
+                enfant for enfant in enfants
+                if plus_proche_que_parent(point_arrivee, (lon, lat), enfant)
+                and not rv.is_on_land(LineString([parent_point, enfant]))  # Vérifie si l'enfant est sur l'eau
+            ]        
+        stop3 = time.time()
+        temps3 += stop3 - start3
 
         liste_rendu.append([(lon,lat), enfants])
     print("temps get_wind ", temps)
     print("temps polaire", temps2)
+    print("temps vérif", temps3)
 
     return liste_rendu
 
@@ -115,23 +126,21 @@ def plus_proche_que_parent(point_arrivee, pos_parent, pos_enfant):
     return distance_enfant < distance_parent
 
 def polaire(vitesse_vent):
-    polaire = pd.read_csv('Sunfast3600.pol', delimiter=r'\s+', index_col=0)
-    liste_vitesse = polaire.columns
+    liste_vitesse = polaire_df.columns
 
     i = 0
     while i < len(liste_vitesse):
         vitesse = float(liste_vitesse[i])
         if vitesse == vitesse_vent:
-            return polaire[liste_vitesse[i]]
+            return polaire_df[liste_vitesse[i]]
         elif vitesse > vitesse_vent:
             inf = i - 1
             sup = i
             t = (vitesse_vent - float(liste_vitesse[inf])) / (float(liste_vitesse[sup]) - float(liste_vitesse[inf]))
-            return t * polaire[liste_vitesse[inf]] + (1 - t) * polaire[liste_vitesse[sup]]
+            return t * polaire_df[liste_vitesse[inf]] + (1 - t) * polaire_df[liste_vitesse[sup]]
         i += 1
     print('Erreur vitesse de vent')
     return None
-
 
 def recup_vitesse_fast(pol_v_vent, angle):
     if pol_v_vent is None:
@@ -221,99 +230,94 @@ def dist_bateau_point(points, point_final, n):
     
     return False
 
-def itere_jusqua_dans_enveloppe(position_initiale, position_finale, pas_temporel, pas_angle, dist, live = False, enregistrement = True):
-    
+def itere_jusqua_dans_enveloppe(position_initiale, position_finale, pas_temporel, pas_angle, dist, loc, live=False, enregistrement=True):
     heure = 0
-    
     start_i = time.time()
-
     temp = pas_temporel
-    
     positions = [position_initiale]
     iter_count = 0
     parent_map = {position_initiale: None}  # Pour suivre les relations parent-enfant
-    
+
     if live:
-        plt.figure(figsize=(10, 8))
-        plt.xlabel('Longitude')
-        plt.ylabel('Latitude')
+        fig, ax = plt.subplots(figsize=(10, 8), subplot_kw={'projection': ccrs.PlateCarree()})
+        ax.set_extent([-4.5, -2, 47, 48], crs=ccrs.PlateCarree())  # Zone d'intérêt
+        
+        # Ajouter un fond de carte haute résolution (50 m)
+        ax.add_feature(cfeature.COASTLINE.with_scale('50m'), linewidth=1)
+        ax.add_feature(cfeature.BORDERS.with_scale('50m'), linestyle=':')
+        ax.add_feature(cfeature.LAND, facecolor='lightgray')
+        ax.add_feature(cfeature.OCEAN, facecolor='lightblue')
+        
+        ax.scatter(position_finale[0], position_finale[1], color='black', s=100, marker='*', label='Position Finale')
         plt.title('Itération et Enveloppe Convexe')
-        plt.scatter(position_finale[0], position_finale[1], color='black', s=100, marker='*', label='Position Finale')
         plt.grid(True)
         plt.legend()
-
+    
     while True:
         print(f"Iteration {iter_count}:")
         print('Heure ', heure)
-        
+
         start = time.time()
-        liste_parents_enfants = prochains_points_liste_parent_enfants(positions, temp, pas_angle, True, position_finale, heure = heure)
+        liste_parents_enfants = prochains_points_liste_parent_enfants(
+            positions, temp, pas_angle, True, position_finale, heure=heure
+        )
         stop = time.time()
 
         heure += pas_temporel
         print("temps liste_parents_enfants ", stop - start)
-        
+
         points_aplatis = flatten_list(liste_parents_enfants)
-        
-        enveloppe_concave = forme_concave(points_aplatis,5)
+        enveloppe_concave = forme_concave(points_aplatis, 5)
 
         if live:
             plot_points(liste_parents_enfants, enveloppe_concave, position_finale)
-        
-        # Mettre à jour les relations parent-enfant
+
         for parent, enfants in liste_parents_enfants:
             for enfant in enfants:
                 if enfant not in parent_map:
                     parent_map[enfant] = parent
-        
+
         positions = enveloppe_concave
         print("le nombre de points est : ", len(positions))
-        
+
         if dist_bateau_point(positions, position_finale, 0.01):
             print("validé")
             if temp >= 0.5:
                 temp *= 2/3
-        
+
         closest_point = min(points_aplatis, key=lambda point: distance(point, position_finale))
         print('distance arrivée, point_plus_proche ', distance(closest_point, position_finale))
 
-        
         if dist_bateau_point(positions, position_finale, dist):
             print("La position finale est maintenant dans l'enveloppe concave.")
             
-            # Détermination du point le plus proche de la position finale
-            closest_point = min(points_aplatis, key=lambda point: distance(point, position_finale))
-            print(f"Le point le plus proche de la position finale est : {closest_point}")
-            
-            # Tracer le chemin idéal en remontant les relations parent-enfant
             chemin_ideal = []
             current_point = closest_point
             while current_point is not None:
                 chemin_ideal.append(current_point)
                 current_point = parent_map[current_point]
             
-            chemin_ideal.reverse()  # Inverser pour avoir le chemin de l'origine à la destination
+            chemin_ideal.reverse()
             chemin_x, chemin_y = zip(*chemin_ideal)
             
             stop_f = time.time()
             print("temps_total ", stop_f-start_i)
             if not live:
                 pass
-                rv.plot_wind(chemin_x=chemin_x, chemin_y=chemin_y)
+                rv.plot_wind(loc, chemin_x=chemin_x, chemin_y=chemin_y)
             
-            if live:      
-                plt.plot(chemin_x, chemin_y, color='black', linestyle='-', linewidth=2, label='Chemin Idéal')
-                plt.scatter(chemin_x, chemin_y, color='black', s=50)
+            if live:
+                ax.plot(chemin_x, chemin_y, color='black', linestyle='-', linewidth=2, label='Chemin Idéal')
+                ax.scatter(chemin_x, chemin_y, color='black', s=50)
                 plt.show()
                 
-            
             break
         
         iter_count += 1
     
-    if enregistrement == True:
+    if enregistrement:
         lien_dossier = r"C:\Users\arthu\OneDrive\Arthur\Programmation\TIPE_Arthur_Lhoste\route_ideale"
-        rv.enregistrement_route(chemin_x, chemin_y, pas_temporel, output_dir=lien_dossier)    
+        rv.enregistrement_route(chemin_x, chemin_y, pas_temporel, loc, output_dir=lien_dossier)
     
     return liste_parents_enfants
 
@@ -332,3 +336,6 @@ def plot_points(liste_parents_enfants, enveloppe_convexe, position_finale):
 
     plt.pause(0.5)
 
+
+#Avant dans la fonction polaire, mais je le sors pour le calculer une fois
+polaire_df = pd.read_csv('Sunfast3600.pol', delimiter=r'\s+', index_col=0)
