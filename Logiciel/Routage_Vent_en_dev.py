@@ -2,17 +2,13 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-from time import time, sleep
+from time import time
 import os
 
 from scipy.interpolate import griddata
-from scipy.spatial import KDTree
 
 from cartopy import crs as ccrs, feature as cfeature
 
-from shapely.strtree import STRtree
-from shapely.geometry import GeometryCollection, Polygon, Point, MultiPolygon, LineString
-from shapely.prepared import prep
 from shapely.ops import nearest_points
 from geopy.distance import geodesic
 
