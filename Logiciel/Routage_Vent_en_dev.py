@@ -11,6 +11,8 @@ from cartopy import crs as ccrs, feature as cfeature
 
 from shapely.ops import nearest_points
 from geopy.distance import geodesic
+from shapely.geometry import LineString, Point
+
 
 
 
@@ -235,6 +237,43 @@ def plot_wind(loc, step_indices=[1], chemin_x=None, chemin_y=None, skip=4, save_
         if not save_plots:
             plt.show()  # Afficher les plots
     
+def plot_wind2(ax, loc, step_indices=[1], chemin_x=None, chemin_y=None, skip=4):
+    """
+    Tracer les vecteurs de vent sur un axe existant.
+    
+    Args:
+        ax: L'axe où tracer les données de vent.
+        loc: Étendue de la zone d'intérêt (longitude, latitude).
+        step_indices: Liste des indices temporels pour les données de vent.
+        chemin_x, chemin_y: Coordonnées du chemin idéal (facultatif).
+        skip: Échantillonnage pour les vecteurs de vent.
+    """
+    # Limites géographiques de l'axe
+    ax.set_extent(loc, crs=ccrs.PlateCarree())
+    ax.add_feature(cfeature.COASTLINE.with_scale('50m'), linewidth=1)
+    ax.add_feature(cfeature.BORDERS.with_scale('50m'), linestyle=':')
+    ax.add_feature(cfeature.LAND, facecolor='lightgray')
+    ax.add_feature(cfeature.OCEAN, facecolor='lightblue')
+
+    # Pour chaque étape temporelle, tracer les vecteurs de vent
+    for step_index in step_indices:
+        u10_specific = ds['u10'].isel(step=int(step_index))
+        v10_specific = ds['v10'].isel(step=int(step_index))
+
+        wind_speed = np.sqrt(u10_specific**2 + v10_specific**2)
+
+        # Tracer les vecteurs de vent
+        q = ax.quiver(ds['longitude'][::skip], ds['latitude'][::skip],
+                      u10_specific[::skip, ::skip], v10_specific[::skip, ::skip],
+                      wind_speed[::skip, ::skip], scale=100, cmap='viridis',
+                      transform=ccrs.PlateCarree())
+
+        # Tracer le chemin idéal s'il est fourni
+        if chemin_x is not None and chemin_y is not None:
+            ax.plot(chemin_x, chemin_y, color='black', linestyle='-', linewidth=2, label='Chemin Idéal', transform=ccrs.PlateCarree())
+            ax.scatter(chemin_x, chemin_y, color='black', s=50, transform=ccrs.PlateCarree())
+    
+    
 def get_wind_from_grib(lat, lon, time_step=0):
     """
     Récupère les composantes u10 et v10 du vent à partir du voisin le plus proche.
@@ -367,45 +406,40 @@ def point_ini_fin(loc):
         print("Sélection incomplète.")
         return None
 
-def is_on_land(segment):
-    """
-    Vérifie si un segment coupe la terre, en excluant les polygones trop éloignés.
+def is_on_land(parent, point, distance_threshold=10):
 
-    Args:
-    - segment (LineString): Segment représenté sous forme de LineString.
-    - land_polygons_sindex: Index spatial des polygones de terre.
-    - land_polygons: Polygones de terre.
-    - distance_threshold (float): Seuil de distance en kilomètres pour éviter les polygones lointains.
-
-    Returns:
-    - bool: True si le segment coupe la terre, False sinon.
-    """
-    # Calculer les points les plus proches pour le filtrage
-    start, end = segment.coords[0], segment.coords[1]
-    segment_midpoint = ((start[0] + end[0]) / 2, (start[1] + end[1]) / 2)
-
+    # Construire un segment entre le point parent et l'enfant
+    segment = LineString([parent, point])
+    
+    # Obtenir les indices des polygones potentiellement concernés
     possible_matches_index = list(land_polygons_sindex.intersection(segment.bounds))
     possible_matches = land_polygons.iloc[possible_matches_index]
+    
+    # Vérifier directement si le parent ou l'enfant est sur la terre
+    for polygon in possible_matches.geometry:
+        if polygon.contains(Point(parent)) or polygon.contains(Point(point)):
+            return True
 
+    # Vérifier l'intersection ou la proximité avec les polygones
     for polygon in possible_matches.geometry:
         # Vérification rapide de distance
         nearest = nearest_points(segment, polygon)
-        if geodesic((nearest[0].y, nearest[0].x), (nearest[1].y, nearest[1].x)).km > 10:
-            continue  # Passer aux autres polygones si trop éloigné
-
-        # Vérification de l'intersection précise si proche
+        distance = geodesic((nearest[0].y, nearest[0].x), (nearest[1].y, nearest[1].x)).km
+        if distance > distance_threshold:
+            continue  # Trop loin, on passe au prochain polygone
+        
+        # Vérification précise d'intersection
         if segment.intersects(polygon):
             return True
-
+    
     return False
+
   
 #Chemin d'accès du fichier GRIB vent et courant (pas encore fait)
-file_path = 'C:/Users/arthu/OneDrive/Arthur/Programmation/TIPE_Arthur_Lhoste/Logiciel/Données_vent/METEOCONSULT12Z_VENT_1105_Gascogne.grb'
-file_path_courant = 'C:/Users/arthu/OneDrive/Arthur/Programmation/TIPE_Arthur_Lhoste/Logiciel/Données_vent/METEOCONSULT00Z_COURANT_0921_Gascogne.grb'
+file_path = os.path.join('Logiciel', 'Données_vent', 'METEOCONSULT00Z_VENT_1110_Gascogne_départ_vendée.grb')
 
 # On charge les datasets
 ds = xr.open_dataset(file_path, engine='cfgrib')
-ds_ = xr.open_dataset(file_path_courant, engine = 'cfgrib')
 
 # On charges les composantes u10 et v10 du vent au début comme ça pas besoin de le recalculer à chaque fois qu'on éxecute la fonction
 u10_values = [ds.u10.isel(step=int(step)).values for step in range(ds.dims['step'])]
@@ -414,6 +448,6 @@ v10_values = [ds.v10.isel(step=int(step)).values for step in range(ds.dims['step
 "CE QUI SUIT EST POUR LA FONCTION IS_ONLAND"
 
 # Charger et simplifier les points centraux des polygones
-land_polygons = gpd.read_file(r"C:\Users\arthu\OneDrive\Arthur\Programmation\TIPE_Arthur_Lhoste\Logiciel\Carte_frontières_terrestre\ne_50m_land.shp")
+land_polygons = gpd.read_file(r'Logiciel\Carte_frontières_terrestre\ne_50m_land.shp')
 land_polygons_sindex = land_polygons.sindex
 

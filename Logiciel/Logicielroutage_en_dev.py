@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from matplotlib.path import Path
 
 import alphashape
-from shapely.geometry import Point, MultiPoint
+from shapely.geometry import Point, MultiPoint, MultiPolygon, Polygon
 from cartopy import crs as ccrs, feature as cfeature
 
 import Routage_Vent_en_dev as rv
@@ -69,7 +69,7 @@ def prochains_points_liste_parent_enfants(liste, pas_temporel, pas_angle, filtre
         enfants = prochains_points(parent_point, pol_v_vent, d_vent, pas_temporel, pas_angle)
 
         if filtrer_par_distance and point_arrivee is not None:
-            enfants = [enfant for enfant in enfants if plus_proche_que_parent(point_arrivee, (lon,lat), enfant)] #and not rv.is_on_land(enfant[0], enfant[1])]
+            enfants = [enfant for enfant in enfants if plus_proche_que_parent(point_arrivee, (lon,lat), enfant)]# and not rv.is_on_land(parent_point, enfant)]
 
      
         liste_rendu.append([parent_point, enfants])
@@ -123,21 +123,46 @@ def recup_vitesse_fast(pol_v_vent, angle):
     print('Erreur angle')
     return None
 
-def forme_concave(liste_points, alpha):
-    #Si il y a que 4 points, ça ne peut pas créer une enveloppe concave utile
-    if len(liste_points) < 4:
-        return liste_points
+def forme_concave(points, alpha):
+    """
+    Générer une enveloppe concave propre pour une liste de points donnée.
 
-    #Création de l'enveloppe pour un paramètre alpha choisi    
-    alpha_shape = alphashape.alphashape(liste_points, alpha)
+    Args:
+        points: Liste des points (x, y).
+        alpha: Paramètre de contrôle de la concavité.
 
-    # Extraire les points de l'enveloppe de la forme concave
-    if isinstance(alpha_shape, Point):
-        return [alpha_shape.coords[0]]
-    elif isinstance(alpha_shape, MultiPoint):
-        return list(alpha_shape.geoms)
+    Returns:
+        Liste de points formant l'enveloppe concave triée.
+    """
+    if len(points) < 4:
+        return points  # Pas assez de points pour une enveloppe utile
+
+    # Calcul de l'enveloppe concave brute
+    alpha_shape = alphashape.alphashape(points, alpha)
+
+    # Vérifiez que l'enveloppe est un polygone valide
+    if isinstance(alpha_shape, Polygon):
+        envelope_points = list(alpha_shape.exterior.coords)
     else:
-        return list(alpha_shape.exterior.coords)
+        return points  # Retourne les points d'origine si l'enveloppe est invalide
+
+    # Trier les points pour éviter les traits indésirables
+    return sort_points_clockwise(envelope_points[:-1])
+
+def _filter_long_segments(points, max_length):
+    filtered_points = [points[0]]  # Commencer avec le premier point
+    for i in range(1, len(points)):
+        x1, y1 = filtered_points[-1]
+        x2, y2 = points[i]
+        segment_length = ((x2 - x1)**2 + (y2 - y1)**2)**0.5
+        if segment_length <= max_length:
+            filtered_points.append(points[i])
+
+    # Fermer l'enveloppe si nécessaire
+    if len(filtered_points) > 1 and filtered_points[0] != filtered_points[-1]:
+        filtered_points.append(filtered_points[0])
+
+    return filtered_points
 
 def flatten_list(nested_list):
     flattened_list = []
@@ -195,14 +220,84 @@ def plot_point_live(ax, enveloppe_concave, couleur='blue'):
     ax.plot(hull_x + (hull_x[0],), hull_y + (hull_y[0],), color=couleur, linestyle='-', linewidth=1, transform=ccrs.PlateCarree())
 
     # Tracer les points de l'enveloppe concave
-    ax.scatter(hull_x, hull_y, color='red', s=10, transform=ccrs.PlateCarree(), label='Envelope Points')
+    # ax.scatter(hull_x, hull_y, color='red', s=10, transform=ccrs.PlateCarree(), label='Envelope Points')
 
-    plt.legend()
     plt.pause(0.05)  # Pause pour actualiser l'affichage en live
+
+def plot_point_live2(ax, enveloppe_concave, parent_map, position_finale, step_index, loc, couleur='blue', skip=4):
+    # Effacer uniquement les vecteurs de vent
+    for artist in ax.collections:
+        artist.remove()
+        
+
+    # Tracer les vecteurs de vent
+    rv.plot_wind2(ax, loc, step_indices=[step_index], skip=skip)
+
+    # Vérifier que l'enveloppe est bien une liste de points valides
+    if not isinstance(enveloppe_concave, list) or not all(isinstance(point, (list, tuple)) and len(point) == 2 for point in enveloppe_concave):
+        print(f"L'enveloppe est invalide : {enveloppe_concave}")
+        return
+
+    # Tracer l'enveloppe concave
+    hull_x, hull_y = zip(*enveloppe_concave)
+    ax.plot(hull_x + (hull_x[0],), hull_y + (hull_y[0],), color=couleur, linestyle='-', linewidth=1, transform=ccrs.PlateCarree())
+    ax.scatter(hull_x, hull_y, color='red', s=10, transform=ccrs.PlateCarree(), label='Enveloppe actuelle')
+
+    # Déterminer le point le plus proche de la destination
+    closest_point = min(enveloppe_concave, key=lambda point: distance(point, position_finale))
+
+    # Remonter la relation parent-enfant pour construire le chemin idéal
+    chemin_ideal = []
+    current_point = closest_point
+    while current_point is not None:
+        chemin_ideal.append(current_point)
+        current_point = parent_map[current_point]
+
+    chemin_ideal.reverse()  # Inverser pour partir de l'origine
+
+    
+    if chemin_ideal:
+        chemin_x, chemin_y = zip(*chemin_ideal)
+        ax.plot(chemin_x, chemin_y, color='black', linestyle='-', linewidth=2, label='Chemin Idéal', transform=ccrs.PlateCarree())
+        ax.scatter(chemin_x, chemin_y, color='black', s=50, transform=ccrs.PlateCarree())
+    else:
+        print("Chemin idéal vide : impossible de tracer la route.")
+
+
+
+    # Ajouter une pause pour l'affichage en temps réel
+    plt.pause(0.05)
+
+
+
+def sort_points_clockwise(points):
+    """
+    Trier les points dans l'ordre horaire pour garantir un contour propre.
+
+    Args:
+        points: Liste des points (x, y).
+
+    Returns:
+        Liste des points triés dans l'ordre horaire.
+    """
+    # Calculer le centre de gravité des points
+    center_x = np.mean([x for x, y in points])
+    center_y = np.mean([y for x, y in points])
+
+    # Calculer les angles par rapport au centre
+    points_with_angles = [
+        (x, y, np.arctan2(y - center_y, x - center_x)) for x, y in points
+    ]
+
+    # Trier les points par angle (ordre horaire)
+    sorted_points = sorted(points_with_angles, key=lambda p: p[2])
+
+    # Retourner les points sans les angles
+    return [(x, y) for x, y, angle in sorted_points]
 
 def itere_jusqua_dans_enveloppe(position_initiale, position_finale, pas_temporel, pas_angle, tolerance, loc_nav, live=False, enregistrement=True):
     
-    heure = 13
+    heure = 0
     
     temp = pas_temporel
     
@@ -211,6 +306,8 @@ def itere_jusqua_dans_enveloppe(position_initiale, position_finale, pas_temporel
     iter_count = 0
     
     parent_map = {position_initiale: None}
+    
+    envconcave_precedent = []
     
     if live:
         fig, ax = plt.subplots(figsize=(10, 8), subplot_kw={'projection': ccrs.PlateCarree()})
@@ -229,31 +326,31 @@ def itere_jusqua_dans_enveloppe(position_initiale, position_finale, pas_temporel
         print(f"Iteration {iter_count}:")
         print('Heure ', heure)
 
-        start = time.time()
-        liste_parents_enfants = prochains_points_liste_parent_enfants(positions, temp, pas_angle, True, position_finale, heure=heure)
-        stop = time.time()
+        liste_parents_enfants = prochains_points_liste_parent_enfants(positions, temp, pas_angle, True, position_finale, heure=math.floor(heure))
 
         heure += pas_temporel
-        print("temps liste_parents_enfants ", stop - start)
 
         points_aplatis = flatten_list(liste_parents_enfants)
-        #points_reduits = filtrer_points_proches(points_aplatis, seuil_distance=0.001)
-        #print("Nombre de points dans points_reduits:", len(points_reduits))
+        
 
-
-        t1= time.time()
-        enveloppe_concave = forme_concave(points_aplatis, 3)
+        enveloppe_concave = forme_concave(points_aplatis, 5)
+        
+        enveloppe_concave = [point for point in enveloppe_concave if point not in envconcave_precedent]
+        enveloppe_concave.append((position_initiale))
+        #enveloppe_concave = sort_points_clockwise(enveloppe_concave)
+        envconcave_precedent = enveloppe_concave
+        
         print("Nombre de points dans enveloppe_concave:", len(enveloppe_concave))
 
-        s1 = time.time()
-        print("temps envconc ", s1 - t1)
-        if live:
-            plot_point_live(ax, enveloppe_concave)
-                
         for parent, enfants in liste_parents_enfants:
             for enfant in enfants:
                 if enfant not in parent_map:
                     parent_map[enfant] = parent
+
+        if live:
+            plot_point_live2(ax, enveloppe_concave, parent_map, position_finale, step_index=iter_count, loc=loc_nav)
+                
+        
 
         # Mettre à jour les positions pour la prochaine itération
         positions = enveloppe_concave
@@ -305,7 +402,6 @@ def itere_jusqua_dans_enveloppe(position_initiale, position_finale, pas_temporel
     
     return liste_parents_enfants
 
-
 def itere_jusqua_dans_enveloppe_2(position_initiale, position_finale, pas_temporel, pas_angle, dist, loc_nav, live = False, enregistrement = True):
     
     heure = 13
@@ -339,6 +435,7 @@ def itere_jusqua_dans_enveloppe_2(position_initiale, position_finale, pas_tempor
         points_aplatis = flatten_list(liste_parents_enfants)
         
         enveloppe_concave = forme_concave(points_aplatis,3)
+        
 
         if live:
             plot_points(liste_parents_enfants, enveloppe_concave, position_finale)
@@ -393,10 +490,20 @@ def itere_jusqua_dans_enveloppe_2(position_initiale, position_finale, pas_tempor
         iter_count += 1
     
     if enregistrement == True:
-        lien_dossier = r"C:\Users\arthu\OneDrive\Arthur\Programmation\TIPE_Arthur_Lhoste\route_ideale"
+        lien_dossier = "route_ideale"
         rv.enregistrement_route(chemin_x, chemin_y, pas_temporel, output_dir=lien_dossier)    
     
     return liste_parents_enfants
 
 #Avant dans la fonction polaire, mais je le sors pour le calculer une fois
-polaire_df = pd.read_csv('Sunfast3600.pol', delimiter=r'\s+', index_col=0)
+
+# polaire_df = pd.read_csv(r'Logiciel\Sunfast3600.pol', delimiter=r'\s+', index_col=0)
+polaire_df = pd.read_csv(r'Logiciel\Imoca2.pol', delimiter=r';', index_col=0)
+
+
+
+# # Nettoyer toutes les cellules pour ne garder que la première valeur avant ":"
+# polaire_df_clean = polaire_df.applymap(lambda x: str(x).split(':')[0] if ':' in str(x) else x)
+
+# # Vérifier les premières lignes du DataFrame nettoyé
+# print(polaire_df_clean.head())
