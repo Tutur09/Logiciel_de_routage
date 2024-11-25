@@ -4,6 +4,12 @@
 
 Ce logiciel permet de calculer et d'analyser des itinéraires en tenant compte des données de vent. Il est conçu pour aider à l'optimisation des trajets en mer ou dans les zones affectées par des conditions de vent variables.
 
+## Utilisation du routeur
+J'ai partagé une environnement conda avec toutes les bibliothèques nécessaire au fonctionnement.
+- Télécharger anaconda3
+- Télécharger le document `routage_env.yml` et l'ouvrir avec conda
+- Télécharger le dossier avec toutes les fonctions nécessaires (données de vent, polaires de vitesse, scripts python, ...)
+
 ## Fonctionnalités
 
 - Chargement de données de vent à partir de fichiers GRIB.
