@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from time import time
 import os
-
+import Paramètres as p
 from scipy.interpolate import griddata
 
 from cartopy import crs as ccrs, feature as cfeature
@@ -12,9 +12,6 @@ from cartopy import crs as ccrs, feature as cfeature
 from shapely.ops import nearest_points
 from geopy.distance import geodesic
 from shapely.geometry import LineString, Point
-
-
-
 
 import geopandas as gpd
 import xarray as xr
@@ -36,8 +33,7 @@ def generate_wind_map(lon_min, lon_max, lat_min, lat_max, grid_size, wind_streng
     return lon_grid, lat_grid, u, v
 
 def excel2wind_map():
-    fichier = r"C:\Users\arthu\OneDrive\Arthur\Programmation\TIPE_Arthur_Lhoste\Logiciel\Vent.xlsx"
-    data = pd.read_excel(fichier, header=None)
+    data = pd.read_excel(p.excel_wind, header=None)
     
     # Lire les paramètres de latitude, longitude et taille de grille
     lat_i, lon_i, grid_size = data.iloc[1, 0], data.iloc[1, 1], data.iloc[1, 2]
@@ -75,21 +71,7 @@ def excel2wind_map():
 
     return lon_grid, lat_grid, u_values, v_values
 
-def get_wind_at_position(lon, lat, lon_grid, lat_grid, u, v):
-    """
-    Interpoler la direction et la force du vent à une position donnée.
-
-    Args:
-         lon (float): Longitude de la position.
-         lat (float): Latitude de la position.
-         lon_grid (ndarray): Coordonnées de longitude de la grille.
-         lat_grid (ndarray): Coordonnées de latitude de la grille.
-         u (ndarray): Composante u des vecteurs de vent.
-         v (ndarray): Composante v des vecteurs de vent.
-
-    Returns:
-        tuple: Force du vent et direction du vent en degrés.
-    """
+def get_wind_at_position_excel(lon, lat, lon_grid, lat_grid, u, v):
     # Aplatir les grilles et les composants pour l'interpolation
     points = np.array([lon_grid.flatten(), lat_grid.flatten()]).T
     u_values = u.flatten()
@@ -177,7 +159,7 @@ def plot_wind_map(lon_grid, lat_grid, u, v, pos_i, pos_f, chemin_x=None, chemin_
     ax.legend()
     plt.show()
 
-def plot_wind(loc, step_indices=[1], chemin_x=None, chemin_y=None, skip=4, save_plots=False, output_dir=r'C:\Users\arthu\OneDrive\Arthur\Programmation\TIPE_Arthur_Lhoste\images_png'):
+def plot_wind(loc, step_indices=[1], chemin_x=None, chemin_y=None, skip=4, save_plots=False, output_dir= p.output_dir):
     # Créer une figure pour chaque étape spécifiée dans step_indices
     for step_index in step_indices:
         plt.figure(figsize=(12, 7))  # Créer une nouvelle figure à chaque étape
@@ -238,17 +220,6 @@ def plot_wind(loc, step_indices=[1], chemin_x=None, chemin_y=None, skip=4, save_
             plt.show()  # Afficher les plots
     
 def plot_wind2(ax, loc, step_indices=[1], chemin_x=None, chemin_y=None, skip=4):
-    """
-    Tracer les vecteurs de vent sur un axe existant.
-    
-    Args:
-        ax: L'axe où tracer les données de vent.
-        loc: Étendue de la zone d'intérêt (longitude, latitude).
-        step_indices: Liste des indices temporels pour les données de vent.
-        chemin_x, chemin_y: Coordonnées du chemin idéal (facultatif).
-        skip: Échantillonnage pour les vecteurs de vent.
-    """
-    # Limites géographiques de l'axe
     ax.set_extent(loc, crs=ccrs.PlateCarree())
     ax.add_feature(cfeature.COASTLINE.with_scale('50m'), linewidth=1)
     ax.add_feature(cfeature.BORDERS.with_scale('50m'), linestyle=':')
@@ -273,12 +244,7 @@ def plot_wind2(ax, loc, step_indices=[1], chemin_x=None, chemin_y=None, skip=4):
             ax.plot(chemin_x, chemin_y, color='black', linestyle='-', linewidth=2, label='Chemin Idéal', transform=ccrs.PlateCarree())
             ax.scatter(chemin_x, chemin_y, color='black', s=50, transform=ccrs.PlateCarree())
     
-    
-def get_wind_from_grib(lat, lon, time_step=0):
-    """
-    Récupère les composantes u10 et v10 du vent à partir du voisin le plus proche.
-    """
-    
+def get_wind_from_grib(lat, lon, time_step=0):    
     lon = lon % 360
     
     # Utiliser les valeurs de u10 et v10 préchargées
@@ -436,7 +402,7 @@ def is_on_land(parent, point, distance_threshold=10):
 
   
 #Chemin d'accès du fichier GRIB vent et courant (pas encore fait)
-file_path = os.path.join('Logiciel', 'Données_vent', 'METEOCONSULT00Z_VENT_1110_Gascogne_départ_vendée.grb')
+file_path = p.vent
 
 # On charge les datasets
 ds = xr.open_dataset(file_path, engine='cfgrib')
@@ -448,6 +414,6 @@ v10_values = [ds.v10.isel(step=int(step)).values for step in range(ds.dims['step
 "CE QUI SUIT EST POUR LA FONCTION IS_ONLAND"
 
 # Charger et simplifier les points centraux des polygones
-land_polygons = gpd.read_file(r'Logiciel\Carte_frontières_terrestre\ne_50m_land.shp')
+land_polygons = gpd.read_file(p.land)
 land_polygons_sindex = land_polygons.sindex
 
