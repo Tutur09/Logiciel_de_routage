@@ -169,7 +169,7 @@ def plot_wind(loc, step_indices=[1], chemin_x=None, chemin_y=None, skip=4, save_
         if not save_plots:
             plt.show()  # Afficher les plots
     
-def plot_wind2(ax, loc, step_indices=[1], chemin_x=None, chemin_y=None, skip=4):
+def plot_wind2(ax, loc, step_indices=[1], chemin_x=None, chemin_y=None, skip=1):
     ax.set_extent(loc, crs=ccrs.PlateCarree())
     ax.add_feature(cfeature.COASTLINE.with_scale('50m'), linewidth=1)
     ax.add_feature(cfeature.BORDERS.with_scale('50m'), linestyle=':')
@@ -201,7 +201,7 @@ def plot_wind2(ax, loc, step_indices=[1], chemin_x=None, chemin_y=None, skip=4):
         # Tracer les vecteurs de vent
         q = ax.quiver(longitudes[::skip], latitudes[::skip],
                       u10_specific[::skip, ::skip], v10_specific[::skip, ::skip],
-                      wind_speed[::skip, ::skip], scale=100, cmap='viridis',
+                      wind_speed[::skip, ::skip], scale=1000, cmap='viridis',
                       transform=ccrs.PlateCarree())
 
         # Tracer le chemin idéal s'il est fourni
@@ -392,7 +392,7 @@ if p.type == 'grib':
     v10_values = [ds.v10.isel(step=int(step)).values for step in range(ds.dims['step'])]
     
 else:
-    u_xl, v_xl, lat_xl, lon_xl = excel_to_uv_components(r'logiciel\Données_vent\Vent.xlsx')
+    u_xl, v_xl, lat_xl, lon_xl = excel_to_uv_components(p.excel_wind)
     print("Dimensions de lon_grid :", lon_xl.shape)
     print("Dimensions de lat_grid :", lat_xl.shape)
     print("Dimensions de u :", u_xl.shape)

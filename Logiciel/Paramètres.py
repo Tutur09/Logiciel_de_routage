@@ -1,12 +1,12 @@
 #PARAMETRES LOGICIEL_CONTROLE
 position_initiale, position_finale = ((-3.0620315398886806, 47.02309833024118), (-7.679471243042671, 45.13877551020408))
 
-bg = (43.27750727162645, -9.84229985332882)
-hd = (48.73899721806831, -0.25559581307713825)
+bg = (33.0434624891455, -78.75562797102944)
+hd = (66.11535743422027, 6.991309094387126)
 loc_nav = [bg[1], hd[1], bg[0], hd[0]]
 
-pas_temporel = 1
-pas_angle = 10
+pas_temporel = 3
+pas_angle = 15
 tolerance_arrivée = 0.3
 
 enregistrement = False
@@ -14,7 +14,7 @@ live = True
 
 # PARAMETRES ROUTAGE_VENT
 land = r'Logiciel\Carte_frontières_terrestre\ne_10m_land.shp'
-vent = r'Logiciel\Données_vent\METEOCONSULT00Z_VENT_1110_Gascogne_départ_vendée.grb'
+vent = r'Logiciel\Données_vent\METEOCONSULT12Z_VENT_1201_Nord_Atlantique.grb'
 excel_wind = r'Logiciel\Données_vent\Vent.xlsx'
 
 type = 'grib'
