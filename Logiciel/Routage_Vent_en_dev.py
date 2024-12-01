@@ -1,7 +1,10 @@
 #Je sépare la partie vent du code afin de rendre le code plus compréhensible
 import numpy as np
 import matplotlib.pyplot as plt
+
 import pandas as pd
+import openpyxl
+
 from time import time
 import os
 import Paramètres as p
@@ -16,149 +19,96 @@ from shapely.geometry import LineString, Point
 import geopandas as gpd
 import xarray as xr
 
-def generate_wind_map(lon_min, lon_max, lat_min, lat_max, grid_size, wind_strength_range, wind_angle_range):
-
-    lon = np.linspace(lon_min, lon_max, grid_size)
-    lat = np.linspace(lat_min, lat_max, grid_size)
-    lon_grid, lat_grid = np.meshgrid(lon, lat)
-
-    wind_strength = np.random.uniform(wind_strength_range[0], wind_strength_range[1], size=(grid_size, grid_size))
-    wind_angle = np.random.uniform(wind_angle_range[0], wind_angle_range[1], size=(grid_size, grid_size))
-
-    wind_angle_rad = np.deg2rad(wind_angle)
-
-    u = wind_strength * np.cos(wind_angle_rad)
-    v = wind_strength * np.sin(wind_angle_rad)
-
-    return lon_grid, lat_grid, u, v
-
-def excel2wind_map():
-    data = pd.read_excel(p.excel_wind, header=None)
+def excel_to_uv_components(excel_file):
+    # Lire le fichier Excel
+    data = pd.read_excel(excel_file, header=None)
     
-    # Lire les paramètres de latitude, longitude et taille de grille
+    # Lire les paramètres initiaux
     lat_i, lon_i, grid_size = data.iloc[1, 0], data.iloc[1, 1], data.iloc[1, 2]
     nb_col, nb_lig = data.shape[1] - 1, data.shape[0] - 4
     
     # Déterminer les limites de latitude et longitude
     lat_max = lat_i - grid_size * nb_lig
     lon_max = lon_i + grid_size * nb_col
-    lat_min = lat_i
-    lon_min = lon_i
-    
-    # Lire les valeurs de vent depuis le tableau Excel
+
+    # Construire les grilles de latitudes et longitudes
+    latitudes = np.linspace(lat_i, lat_max, nb_lig)
+    longitudes = np.linspace(lon_i, lon_max, nb_col)
+
+    # Extraire les données u et v
     u_values = []
     v_values = []
-    
     for i in range(nb_lig):
         u_row = []
         v_row = []
-        for j in range(0, nb_col):
-            # Lire la cellule et diviser les valeurs
+        for j in range(nb_col):
             u_v = data.iloc[4 + nb_lig - 1 - i, j + 1].split(';')
             u_row.append(float(u_v[0]))  # Composante u
             v_row.append(float(u_v[1]))  # Composante v
         u_values.append(u_row)
         v_values.append(v_row)
-    
+
+    # Convertir en numpy arrays
     u_values = np.array(u_values)
     v_values = np.array(v_values)
 
-    # Création des grilles de coordonnées (longitude et latitude)
-    lon_grid, lat_grid = np.meshgrid(
-        np.linspace(lon_min, lon_max, u_values.shape[1]),
-        np.linspace(lat_max, lat_min, u_values.shape[0])
-    )
+    # Ajouter une dimension temporelle pour simuler des données GRIB
+    u = u_values[np.newaxis, :, :]  # Shape: [1, latitude, longitude]
+    v = v_values[np.newaxis, :, :]  # Shape: [1, latitude, longitude]
 
-    return lon_grid, lat_grid, u_values, v_values
+    return u, v, latitudes, longitudes
 
-def get_wind_at_position_excel(lon, lat, lon_grid, lat_grid, u, v):
-    # Aplatir les grilles et les composants pour l'interpolation
-    points = np.array([lon_grid.flatten(), lat_grid.flatten()]).T
-    u_values = u.flatten()
-    v_values = v.flatten()
+def plot_wind_map(lon, lat, u, v, pos_i, pos_f, chemin_x=None, chemin_y=None):
+        # Ajuster les données si vent_start_line est spécifié
+
+    lat = lat[5:]
+    u = u[:, 5:, :]
+    v = v[:, 5:, :]
+
+    # Si lon et lat sont 1D, créez une grille 2D
+    if lon.ndim == 1 and lat.ndim == 1:
+        lon, lat = np.meshgrid(lon, lat)
     
-    # Interpolation des composants de vent
-    start = time()
-    u_interp = griddata(points, u_values, (lon, lat), method='linear')
-    v_interp = griddata(points, v_values, (lon, lat), method='linear')
-    stop = time()
-    print("temps interpolation ", stop - start)
-
-    if u_interp is None or v_interp is None:
-        raise ValueError("La position demandée est en dehors des limites de la grille.")
-
-    # Calcul de la force du vent et de la direction
-    wind_strength = np.sqrt(u_interp**2 + v_interp**2)
-    wind_angle = (np.rad2deg(np.arctan2(v_interp, u_interp))-90) % 360
-
-    return wind_strength, wind_angle
-
-def plot_wind_map(lon_grid, lat_grid, u, v, pos_i, pos_f, chemin_x=None, chemin_y=None):
-    projPC = ccrs.PlateCarree()  # Projection Plate Carree
+    # Suppression des dimensions inutiles
+    u = u.squeeze()
+    v = v.squeeze()
     
-    # Définir les limites géographiques
-    lonW = lon_grid.min()
-    lonE = lon_grid.max()
-    latS = lat_grid.min()
-    latN = lat_grid.max()
+    # Vérification des dimensions
+    if lon.shape != lat.shape or u.shape != v.shape or lon.shape != u.shape:
+        raise ValueError("Les dimensions de lon, lat, u et v doivent correspondre.")
     
-    # Création de la figure avec projection géographique
-    fig = plt.figure(figsize=(10, 8))
-    ax = plt.subplot(1, 1, 1, projection=projPC)
-    ax.set_title('Carte des Vents avec Chemin Idéal et Interpolation')
-
-    # Tracé de la carte avec les frontières
-    ax.set_extent([lonW, lonE, latS, latN], crs=projPC)
-    ax.coastlines(resolution='110m', color='black')
-    ax.add_feature(cfeature.STATES, linewidth=0.5, edgecolor='brown')
-    ax.add_feature(cfeature.BORDERS, linewidth=0.7, edgecolor='blue')
-    
-    # Affichage du quadrillage
-    gl = ax.gridlines(draw_labels=True, linewidth=0.5, color='gray', alpha=0.5, linestyle='--')
-
     # Calcul de la magnitude du vent
     wind_magnitude = np.sqrt(u**2 + v**2)
-
-    # Création d'une grille régulière pour l'interpolation
-    lon_lin = np.linspace(lon_grid.min(), lon_grid.max(), 300)
-    lat_lin = np.linspace(lat_grid.min(), lat_grid.max(), 300)
+    
+    # Création d'une grille régulière pour interpolation
+    lon_lin = np.linspace(lon.min(), lon.max(), 300)
+    lat_lin = np.linspace(lat.min(), lat.max(), 300)
     lon_interp, lat_interp = np.meshgrid(lon_lin, lat_lin)
-
-    # Interpolation des composantes u et v sur la nouvelle grille
-    u_interp = griddata((lon_grid.ravel(), lat_grid.ravel()), u.ravel(), (lon_interp, lat_interp), method='cubic')
-    v_interp = griddata((lon_grid.ravel(), lat_grid.ravel()), v.ravel(), (lon_interp, lat_interp), method='cubic')
-
-    # Calcul de la magnitude du vent interpolé
-    wind_magnitude_interp = np.sqrt(u_interp**2 + v_interp**2)
-
-    # Utilisation de la colormap pour la vitesse du vent
-    cmap = plt.get_cmap('viridis')
-
-    # Normalisation des couleurs par rapport à la magnitude du vent interpolé
-    norm = plt.Normalize(wind_magnitude_interp.min(), wind_magnitude_interp.max())
-
-    # Affichage de la carte colorée avec les magnitudes du vent interpolées
-    contour = ax.contourf(lon_interp, lat_interp, wind_magnitude_interp, cmap=cmap, levels=100, norm=norm, transform=ccrs.PlateCarree())
-
-    # Affichage du champ de vent avec des flèches noires (taille ajustée)
-    ax.quiver(lon_grid, lat_grid, u, v, color='black', angles='xy', scale_units='xy', scale=200, transform=ccrs.PlateCarree())
-
-    # Affichage des points de départ et d'arrivée
-    ax.scatter(pos_i[0], pos_i[1], color='green', s=100, label='Position Initiale', transform=ccrs.PlateCarree())
-    ax.scatter(pos_f[0], pos_f[1], color='red', s=100, label='Position Finale', transform=ccrs.PlateCarree())
-
-    # Tracé du chemin idéal s'il est fourni
+    
+    # Interpolation des données sur la nouvelle grille
+    u_interp = griddata((lon.ravel(), lat.ravel()), u.ravel(), (lon_interp, lat_interp), method='cubic')
+    v_interp = griddata((lon.ravel(), lat.ravel()), v.ravel(), (lon_interp, lat_interp), method='cubic')
+    
+    # Vérification post-interpolation
+    if np.isnan(u_interp).any() or np.isnan(v_interp).any():
+        raise ValueError("L'interpolation a généré des NaN.")
+    
+    # Affichage des données
+    plt.figure(figsize=(10, 8))
+    plt.contourf(lon_interp, lat_interp, np.sqrt(u_interp**2 + v_interp**2), cmap='viridis', levels=100)
+    plt.quiver(lon, lat, -u, -v, color='black', angles='xy', scale_units='xy', scale=50)
+    plt.scatter(pos_i[0], pos_i[1], color='green', s=100, label='Position Initiale')
+    plt.scatter(pos_f[0], pos_f[1], color='red', s=100, label='Position Finale')
     if chemin_x is not None and chemin_y is not None:
-        ax.plot(chemin_x, chemin_y, color='black', linestyle='-', linewidth=2, label='Chemin Idéal', transform=ccrs.PlateCarree())
-        ax.scatter(chemin_x, chemin_y, color='black', s=50, transform=ccrs.PlateCarree())
-
-    # Ajout de la barre de couleur
-    cbar = plt.colorbar(contour, ax=ax, orientation='vertical', label='Force du vent')
-
-    # Affichage de la légende et du quadrillage
-    ax.legend()
+        plt.plot(chemin_x, chemin_y, color='black', linestyle='-', linewidth=2, label='Chemin Idéal')
+    plt.colorbar(label='Magnitude du vent')
+    plt.legend()
+    plt.xlabel('Longitude')
+    plt.ylabel('Latitude')
+    plt.title('Carte des Vents avec Chemin Idéal et Interpolation')
+    plt.grid(True)
     plt.show()
-
+     
 def plot_wind(loc, step_indices=[1], chemin_x=None, chemin_y=None, skip=4, save_plots=False, output_dir= p.output_dir):
     # Créer une figure pour chaque étape spécifiée dans step_indices
     for step_index in step_indices:
@@ -225,16 +175,31 @@ def plot_wind2(ax, loc, step_indices=[1], chemin_x=None, chemin_y=None, skip=4):
     ax.add_feature(cfeature.BORDERS.with_scale('50m'), linestyle=':')
     ax.add_feature(cfeature.LAND, facecolor='lightgray')
     ax.add_feature(cfeature.OCEAN, facecolor='lightblue')
-
-    # Pour chaque étape temporelle, tracer les vecteurs de vent
+    
+    # Tracer les vecteurs de vent en fonction de la source
     for step_index in step_indices:
-        u10_specific = ds['u10'].isel(step=int(step_index))
-        v10_specific = ds['v10'].isel(step=int(step_index))
+        if p.type == "grib":
+            # GRIB : Extraire les données pour l'étape spécifiée
+            u10_specific = ds['u10'].isel(step=int(step_index))
+            v10_specific = ds['v10'].isel(step=int(step_index))
+            latitudes = ds['latitude'].values
+            longitudes = ds['longitude'].values
 
+        elif p.type == "excel":
+            # Excel : Les données ne changent pas selon l'étape (pas de temps)
+            u10_specific = u_xl[0]
+            v10_specific = v_xl[0]
+            latitudes = lat_xl
+            longitudes = lon_xl
+
+        else:
+            raise ValueError("La source spécifiée doit être 'grib' ou 'excel'.")
+
+        # Calcul de la vitesse du vent
         wind_speed = np.sqrt(u10_specific**2 + v10_specific**2)
 
         # Tracer les vecteurs de vent
-        q = ax.quiver(ds['longitude'][::skip], ds['latitude'][::skip],
+        q = ax.quiver(longitudes[::skip], latitudes[::skip],
                       u10_specific[::skip, ::skip], v10_specific[::skip, ::skip],
                       wind_speed[::skip, ::skip], scale=100, cmap='viridis',
                       transform=ccrs.PlateCarree())
@@ -244,33 +209,48 @@ def plot_wind2(ax, loc, step_indices=[1], chemin_x=None, chemin_y=None, skip=4):
             ax.plot(chemin_x, chemin_y, color='black', linestyle='-', linewidth=2, label='Chemin Idéal', transform=ccrs.PlateCarree())
             ax.scatter(chemin_x, chemin_y, color='black', s=50, transform=ccrs.PlateCarree())
     
-def get_wind_from_grib(lat, lon, time_step=0):    
-    lon = lon % 360
+def get_wind_at_position(lat, lon, time_step=0):
+
+    lon = lon % 360  # Assurez-vous que la longitude est dans la plage [0, 360]
+
+    if p.type == 'grib':
+        # Sélection des données temporelles
+        u_time_step = u10_values[time_step]
+        v_time_step = v10_values[time_step]
+        latitudes = ds.latitude.values
+        longitudes = ds.longitude.values
+
+    elif p.type == 'excel':
+        u_time_step = u_xl[0]
+        v_time_step = v_xl[0]
+        latitudes = lat_xl
+        longitudes = lon_xl
     
-    # Utiliser les valeurs de u10 et v10 préchargées
-    u10_time_step = u10_values[time_step]
-    v10_time_step = v10_values[time_step]
-    
-    latitudes = ds.latitude.values
-    longitudes = ds.longitude.values
-    
-    # Calculer les différences de latitude et longitude
+    else:
+        raise ValueError("La source spécifiée doit être 'grib' ou 'excel'.")
+
+    # Calcul des distances
     lat_diff = np.abs(latitudes - lat)
     lon_diff = np.abs(longitudes - lon)
-    
-    # Calcul des distances et index du voisin le plus proche
-    distances = lat_diff[:, None]**2 + lon_diff**2
+
+    if lat_diff.ndim == 1 and lon_diff.ndim == 1:  # Coordonnées 1D
+        distances = lat_diff[:, None]**2 + lon_diff**2
+    else:  # Coordonnées 2D
+        distances = lat_diff**2 + lon_diff**2
+
+    # Trouver l'index du point le plus proche
     closest_index = np.unravel_index(np.argmin(distances), distances.shape)
-    
-    # Récupération des valeurs pour le voisin le plus proche
-    u10 = u10_time_step[closest_index]
-    v10 = v10_time_step[closest_index]
-    
+
+    # Récupérer les valeurs de vent
+    u = u_time_step[closest_index]
+    v = v_time_step[closest_index]
+
     # Calcul de la vitesse et de l'angle
-    v_vent = np.sqrt((u10)**2 + v10**2) 
-    a_vent = (np.degrees(np.arctan2(-u10, -v10))) % 360 
-    
+    v_vent = np.sqrt(u**2 + v**2)
+    a_vent = (np.degrees(np.arctan2(-u, -v))) % 360
+
     return v_vent, a_vent
+
 
 def enregistrement_route(chemin_x, chemin_y, pas_temporel, loc, output_dir='./', skip = 4):
     
@@ -404,12 +384,22 @@ def is_on_land(parent, point, distance_threshold=10):
 #Chemin d'accès du fichier GRIB vent et courant (pas encore fait)
 file_path = p.vent
 
-# On charge les datasets
-ds = xr.open_dataset(file_path, engine='cfgrib')
+if p.type == 'grib':
+    # On charge les datasets
+    ds = xr.open_dataset(file_path, engine='cfgrib')
+    # On charges les composantes u10 et v10 du vent au début comme ça pas besoin de le recalculer à chaque fois qu'on éxecute la fonction
+    u10_values = [ds.u10.isel(step=int(step)).values for step in range(ds.dims['step'])]
+    v10_values = [ds.v10.isel(step=int(step)).values for step in range(ds.dims['step'])]
+    
+else:
+    u_xl, v_xl, lat_xl, lon_xl = excel_to_uv_components(r'logiciel\Données_vent\Vent.xlsx')
+    print("Dimensions de lon_grid :", lon_xl.shape)
+    print("Dimensions de lat_grid :", lat_xl.shape)
+    print("Dimensions de u :", u_xl.shape)
+    print("Dimensions de v :", v_xl.shape)
 
-# On charges les composantes u10 et v10 du vent au début comme ça pas besoin de le recalculer à chaque fois qu'on éxecute la fonction
-u10_values = [ds.u10.isel(step=int(step)).values for step in range(ds.dims['step'])]
-v10_values = [ds.v10.isel(step=int(step)).values for step in range(ds.dims['step'])]
+    # plot_wind_map(lon_xl, lat_xl, u_xl, v_xl,(-3, 47), (-7.6, 45.))
+
 
 "CE QUI SUIT EST POUR LA FONCTION IS_ONLAND"
 

@@ -17,6 +17,7 @@ land = r'Logiciel\Carte_frontières_terrestre\ne_10m_land.shp'
 vent = r'Logiciel\Données_vent\METEOCONSULT00Z_VENT_1110_Gascogne_départ_vendée.grb'
 excel_wind = r'Logiciel\Données_vent\Vent.xlsx'
 
+type = 'grib'
 
 output_dir = r'C:\Users\arthu\OneDrive\Arthur\Programmation\TIPE_Arthur_Lhoste\images_png'
 
@@ -25,7 +26,7 @@ delimeter = r';'  # r'\s+' si Sunfastpol sinon r';'  pour Imoca
 polaire = r'Logiciel\Imoca2.pol'
 
 heure_debut = 0
-alpha = 5
+alpha = 3
 tolerance = 0.01
 
 land_contact = False 

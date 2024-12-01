@@ -56,7 +56,7 @@ def prochains_points_liste_parent_enfants(liste, pas_temporel, pas_angle, heure,
     for lon, lat in liste:
         parent_point = (lon, lat)
 
-        v_vent, d_vent = rv.get_wind_from_grib(lat, lon, heure)
+        v_vent, d_vent = rv.get_wind_at_position(lat, lon, heure)
         
         pol_v_vent = polaire(v_vent)
         
@@ -304,6 +304,17 @@ def sort_points_clockwise(points):
     # Retourner les points sans les angles
     return [(x, y) for x, y, angle in sorted_points]
 
+def elaguer_enveloppe(points, distance):
+    def calculer_distance(p1, p2):
+        return math.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)
+    points_elagues = []
+    for point in points:
+        trop_proche = any(calculer_distance(point, autre) < distance for autre in points_elagues)
+        if not trop_proche:
+            points_elagues.append(point)
+    
+    return points_elagues
+
 def itere_jusqua_dans_enveloppe(position_initiale, position_finale, pas_temporel, pas_angle, tolerance, loc_nav, live=False, enregistrement=True):
     
     heure = p.heure_debut
@@ -345,6 +356,7 @@ def itere_jusqua_dans_enveloppe(position_initiale, position_finale, pas_temporel
         enveloppe_concave = forme_concave(points_aplatis, p.alpha)
         
         enveloppe_concave = [point for point in enveloppe_concave if point not in envconcave_precedent]
+        enveloppe_concave = elaguer_enveloppe(enveloppe_concave, 0.05)
         enveloppe_concave.append((position_initiale))
         enveloppe_concave = sort_points_clockwise(enveloppe_concave)
         envconcave_precedent = enveloppe_concave
@@ -411,121 +423,5 @@ def itere_jusqua_dans_enveloppe(position_initiale, position_finale, pas_temporel
     
     return liste_parents_enfants
 
-def itere_jusqua_dans_enveloppe2(position_initiale, position_finale, pas_temporel, pas_angle, tolerance, loc_nav, live=False, enregistrement=True):
-    heure = 0
-    temp = pas_temporel
-    positions = [position_initiale]
-    iter_count = 0
-    parent_map = {position_initiale: None}
-    envconcave_precedent = []
-    chemin_group = {"lines": None, "points": None}  # Gestion des tracés de la route
-    enveloppes = []  # Liste pour enregistrer les enveloppes concaves
-
-    if live:
-        fig, ax = plt.subplots(figsize=(10, 8), subplot_kw={'projection': ccrs.PlateCarree()})
-        ax.set_extent(loc_nav, crs=ccrs.PlateCarree())
-        ax.add_feature(cfeature.COASTLINE.with_scale('50m'), linewidth=1)
-        ax.add_feature(cfeature.BORDERS.with_scale('50m'), linestyle=':')
-        ax.add_feature(cfeature.LAND, facecolor='lightgray')
-        ax.add_feature(cfeature.OCEAN, facecolor='lightblue')
-        ax.scatter(position_finale[0], position_finale[1], color='black', s=100, marker='*', label='Position Finale')
-        plt.title('Itération et Enveloppe Concave')
-        plt.grid(True)
-        plt.legend()
-
-    while True:
-        print(f"Iteration {iter_count}:")
-        print('Heure ', heure)
-
-        # Calcul des prochains points
-        liste_parents_enfants = prochains_points_liste_parent_enfants(positions, temp, pas_angle, True, position_finale, heure=math.floor(heure))
-        heure += pas_temporel
-        points_aplatis = flatten_list(liste_parents_enfants)
-
-        # Calcul de l'enveloppe concave
-        enveloppe_concave = forme_concave(points_aplatis, 5)
-        enveloppe_concave = [point for point in enveloppe_concave if point not in envconcave_precedent]
-        enveloppe_concave.append((position_initiale))
-        enveloppe_concave = sort_points_clockwise(enveloppe_concave)
-        envconcave_precedent = enveloppe_concave
-
-        # Ajouter l'enveloppe actuelle à la liste des enveloppes
-        enveloppes.append(enveloppe_concave)
-
-        print("Nombre de points dans enveloppe_concave:", len(enveloppe_concave))
-
-        # Mise à jour du parent_map
-        for parent, enfants in liste_parents_enfants:
-            for enfant in enfants:
-                if enfant not in parent_map:
-                    parent_map[enfant] = parent
-
-        # Visualisation en direct
-        if live:
-            chemin_group = plot_point_live2_modif(
-                ax, enveloppe_concave, parent_map, position_finale,
-                step_index=iter_count, loc=loc_nav, chemin_group=chemin_group, enveloppes=enveloppes
-            )
-
-        # Mise à jour des positions
-        positions = enveloppe_concave
-        print("Le nombre de points est : ", len(positions))
-
-        # Validation si la tolérance est atteinte
-        if dist_bateau_point(positions, position_finale, 0.01):
-            print("validé")
-            if temp >= 0.5:
-                temp *= 2 / 3
-
-        closest_point = min(enveloppe_concave, key=lambda point: distance(point, position_finale))
-        print('distance arrivée, point_plus_proche ', distance(closest_point, position_finale))
-
-        if dist_bateau_point(positions, position_finale, tolerance):
-            print("La position finale est maintenant dans l'enveloppe concave.")
-
-            # Détermination du chemin idéal
-            closest_point = min(points_aplatis, key=lambda point: distance(point, position_finale))
-            print(f"Le point le plus proche de la position finale est : {closest_point}")
-
-            chemin_ideal = []
-            current_point = closest_point
-            while current_point is not None:
-                chemin_ideal.append(current_point)
-                current_point = parent_map[current_point]
-
-            chemin_ideal.reverse()  # Inverser le chemin
-            chemin_x, chemin_y = zip(*chemin_ideal)
-
-            if not live:
-                rv.plot_wind(loc_nav, chemin_x=chemin_x, chemin_y=chemin_y)
-
-            if live:
-                chemin_group = plot_point_live2_modif(
-                    ax, enveloppe_concave, parent_map, position_finale,
-                    step_index=iter_count, loc=loc_nav, chemin_group=chemin_group, enveloppes=enveloppes
-                )
-                plt.show()
-
-            break
-
-        iter_count += 1
-
-    # Enregistrement du chemin idéal
-    if enregistrement:
-        lien_dossier = "route_ideale"
-        rv.enregistrement_route(chemin_x, chemin_y, pas_temporel, loc_nav, output_dir=lien_dossier)
-
-    return liste_parents_enfants
-
-
 #Avant dans la fonction polaire, mais je le sors pour le calculer une fois
-
 polaire_df = pd.read_csv(p.polaire, delimiter=p.delimeter, index_col=0)
-
-
-
-# # Nettoyer toutes les cellules pour ne garder que la première valeur avant ":"
-# polaire_df_clean = polaire_df.applymap(lambda x: str(x).split(':')[0] if ':' in str(x) else x)
-
-# # Vérifier les premières lignes du DataFrame nettoyé
-# print(polaire_df_clean.head())
