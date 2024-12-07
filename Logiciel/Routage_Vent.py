@@ -250,7 +250,7 @@ def plot_wind2(ax, loc, step_indices=[1], chemin_x=None, chemin_y=None):
         # Ajouter une barre de couleur pour l'intensité
         if p.drapeau:
             cbar = plt.colorbar(
-                mappable=mesh, ax=ax, orientation='vertical', pad=0.02, shrink=0.8
+                mappable=mesh, ax=ax, orientation='vertical', pad=0.02, shrink=0.5
             )
             cbar.set_label("Vitesse du vent (nœuds)")
         p.drapeau = False

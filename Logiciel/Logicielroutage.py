@@ -47,34 +47,73 @@ def prochains_points(position, pol_v_vent, d_vent, pas_temporel, pas_angle):
 
     return liste_points
 
-def prochains_points_liste_parent_enfants(liste, pas_temporel, pas_angle, heure, filtrer_par_distance=True):
+# def prochains_points_liste_parent_enfants(liste, pas_temporel, pas_angle, heure, filtrer_par_distance=True):
 
-    liste_rendu = []
+#     liste_rendu = []
 
-    for lon, lat in liste:
-        parent_point = (lon, lat)
+#     for lon, lat in liste:
+#         parent_point = (lon, lat)
 
-        v_vent, d_vent = rv.get_wind_at_position(lat, lon, heure)
+#         v_vent, d_vent = rv.get_wind_at_position(lat, lon, heure)
         
-        pol_v_vent = polaire(v_vent)
+#         pol_v_vent = polaire(v_vent)
         
-        enfants = prochains_points(parent_point, pol_v_vent, d_vent, pas_temporel, pas_angle)
+#         enfants = prochains_points(parent_point, pol_v_vent, d_vent, pas_temporel, pas_angle)
 
-        if filtrer_par_distance:
-            enfants = [enfant for enfant in enfants if (enfant[1] <= p.cadre_navigation[1][0] 
-                                                        and enfant[1] >= p.cadre_navigation[0][0]
-                                                        and enfant[0] <= p.cadre_navigation[1][1]
-                                                        and enfant[0] >= p.cadre_navigation[0][1])]
+#         if filtrer_par_distance:
+#             enfants = [enfant for enfant in enfants if (enfant[1] <= p.cadre_navigation[1][0] 
+#                                                         and enfant[1] >= p.cadre_navigation[0][0]
+#                                                         and enfant[0] <= p.cadre_navigation[1][1]
+#                                                         and enfant[0] >= p.cadre_navigation[0][1])]
                        
-            if p.land_contact:
-                enfants = [enfant for enfant in enfants if plus_proche_que_parent(p.position_finale, parent_point, enfant) and not rv.is_on_land(parent_point, enfant)]
-            else:
-                enfants = [enfant for enfant in enfants if plus_proche_que_parent(p.position_finale, parent_point, enfant)]
+#             if p.land_contact:
+#                 enfants = [enfant for enfant in enfants if plus_proche_que_parent(p.position_finale, parent_point, enfant) and not rv.is_on_land(parent_point, enfant)]
+#             else:
+#                 enfants = [enfant for enfant in enfants if plus_proche_que_parent(p.position_finale, parent_point, enfant)]
      
-        liste_rendu.append([parent_point, enfants])
+#         liste_rendu.append([parent_point, enfants])
 
+
+#     return liste_rendu
+
+
+def traiter_point(lon, lat, pas_temporel, pas_angle, heure, filtrer_par_distance):
+    parent_point = (lon, lat)
+
+    v_vent, d_vent = rv.get_wind_at_position(lat, lon, heure)
+    pol_v_vent = polaire(v_vent)
+
+    enfants = prochains_points(parent_point, pol_v_vent, d_vent, pas_temporel, pas_angle)
+
+    if filtrer_par_distance:
+        # Filtrage par distance et limites du cadre de navigation
+        enfants = [enfant for enfant in enfants if (enfant[1] <= p.cadre_navigation[1][0] 
+                                                    and enfant[1] >= p.cadre_navigation[0][0]
+                                                    and enfant[0] <= p.cadre_navigation[1][1]
+                                                    and enfant[0] >= p.cadre_navigation[0][1])]
+
+        if p.land_contact:
+            enfants = [enfant for enfant in enfants 
+                       if plus_proche_que_parent(p.position_finale, parent_point, enfant) 
+                       and not rv.is_on_land(parent_point, enfant)]
+        else:
+            enfants = [enfant for enfant in enfants 
+                       if plus_proche_que_parent(p.position_finale, parent_point, enfant)]
+
+    return [parent_point, enfants]
+
+def prochains_points_liste_parent_enfants(liste, pas_temporel, pas_angle, heure, filtrer_par_distance=True):
+    # Utilisation d’un ThreadPoolExecutor pour paralléliser les opérations
+    with ThreadPoolExecutor() as executor:
+        # On lance en parallèle le traitement de chaque point de la liste
+        futures = [executor.submit(traiter_point, lon, lat, pas_temporel, pas_angle, heure, filtrer_par_distance) 
+                   for lon, lat in liste]
+
+        # On récupère les résultats quand ils sont prêts
+        liste_rendu = [f.result() for f in futures]
 
     return liste_rendu
+
 
 def plus_proche_que_parent(point_arrivee, pos_parent, pos_enfant):
     distance_parent = math.sqrt((point_arrivee[0] - pos_parent[0])**2 + (point_arrivee[1] - pos_parent[1])**2)
@@ -331,6 +370,7 @@ def itere_jusqua_dans_enveloppe(position_initiale, position_finale, pas_temporel
         plt.title('Itération et Enveloppe Concave')
         plt.grid(True)
         plt.legend()
+        plt.tight_layout()
 
     
     while True:
@@ -345,7 +385,7 @@ def itere_jusqua_dans_enveloppe(position_initiale, position_finale, pas_temporel
       
     
         enveloppe_concave = envconc.enveloppe_concave(np.array((points_aplatis)))
-        # enveloppe_concave = elaguer_enveloppe(enveloppe_concave, 0.1)
+        enveloppe_concave = elaguer_enveloppe(enveloppe_concave, 0.5)
         enveloppe_concave = [
             point for point in enveloppe_concave
             if not any(np.array_equal(point, precedent) for precedent in envconcave_precedent)
