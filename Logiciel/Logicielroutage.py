@@ -47,36 +47,6 @@ def prochains_points(position, pol_v_vent, d_vent, pas_temporel, pas_angle):
 
     return liste_points
 
-# def prochains_points_liste_parent_enfants(liste, pas_temporel, pas_angle, heure, filtrer_par_distance=True):
-
-#     liste_rendu = []
-
-#     for lon, lat in liste:
-#         parent_point = (lon, lat)
-
-#         v_vent, d_vent = rv.get_wind_at_position(lat, lon, heure)
-        
-#         pol_v_vent = polaire(v_vent)
-        
-#         enfants = prochains_points(parent_point, pol_v_vent, d_vent, pas_temporel, pas_angle)
-
-#         if filtrer_par_distance:
-#             enfants = [enfant for enfant in enfants if (enfant[1] <= p.cadre_navigation[1][0] 
-#                                                         and enfant[1] >= p.cadre_navigation[0][0]
-#                                                         and enfant[0] <= p.cadre_navigation[1][1]
-#                                                         and enfant[0] >= p.cadre_navigation[0][1])]
-                       
-#             if p.land_contact:
-#                 enfants = [enfant for enfant in enfants if plus_proche_que_parent(p.position_finale, parent_point, enfant) and not rv.is_on_land(parent_point, enfant)]
-#             else:
-#                 enfants = [enfant for enfant in enfants if plus_proche_que_parent(p.position_finale, parent_point, enfant)]
-     
-#         liste_rendu.append([parent_point, enfants])
-
-
-#     return liste_rendu
-
-
 def traiter_point(lon, lat, pas_temporel, pas_angle, heure, filtrer_par_distance):
     parent_point = (lon, lat)
 
@@ -113,7 +83,6 @@ def prochains_points_liste_parent_enfants(liste, pas_temporel, pas_angle, heure,
         liste_rendu = [f.result() for f in futures]
 
     return liste_rendu
-
 
 def plus_proche_que_parent(point_arrivee, pos_parent, pos_enfant):
     distance_parent = math.sqrt((point_arrivee[0] - pos_parent[0])**2 + (point_arrivee[1] - pos_parent[1])**2)
@@ -161,58 +130,6 @@ def recup_vitesse_fast(pol_v_vent, angle):
     print('Erreur angle')
     return None
 
-def forme_concave(points, alpha):
-    points = np.array(points)  # Assurez-vous que les points sont un tableau numpy
-    
-    # Calcul de l'alpha-shape
-    hull = alphashape.alphashape(points, alpha)
-    
-    # Extraire les sommets de l'enveloppe
-    if hull is None:  # Aucun polygone généré
-        return np.array([])
-    elif hull.geom_type == 'Point':  # Un seul point dans l'enveloppe
-        return np.array([hull.coords[0]])
-    elif hull.geom_type == 'LineString':  # Une ligne simple
-        return np.array(hull.coords)
-    elif hull.geom_type == 'Polygon':  # Polygone
-        return np.array(hull.exterior.coords)
-    else:
-        print(hull.geom_type)
-        res = np.vstack([np.array(polygon.exterior.coords) for polygon in hull.geoms])
-        return res 
-
-def forme_concave_pasbien(points, alpha):
-    if len(points) < 4:
-        return points  # Pas assez de points pour une enveloppe utile
-
-    # Calcul de l'enveloppe concave brute
-    alpha_shape = alphashape.alphashape(points, alpha)
-
-    # Vérifiez que l'enveloppe est un polygone valide
-    if isinstance(alpha_shape, Polygon):
-        envelope_points = list(alpha_shape.exterior.coords)
-    else:
-        print('ERROR')
-        return points  # Retourne les points d'origine si l'enveloppe est invalide
-
-    # Trier les points pour éviter les traits indésirables
-    return sort_points_clockwise(envelope_points[:-1])
-
-def _filter_long_segments(points, max_length):
-    filtered_points = [points[0]]  # Commencer avec le premier point
-    for i in range(1, len(points)):
-        x1, y1 = filtered_points[-1]
-        x2, y2 = points[i]
-        segment_length = ((x2 - x1)**2 + (y2 - y1)**2)**0.5
-        if segment_length <= max_length:
-            filtered_points.append(points[i])
-
-    # Fermer l'enveloppe si nécessaire
-    if len(filtered_points) > 1 and filtered_points[0] != filtered_points[-1]:
-        filtered_points.append(filtered_points[0])
-
-    return filtered_points
-
 def flatten_list(nested_list):
     flattened_list = []
     
@@ -225,11 +142,6 @@ def flatten_list(nested_list):
     
     _flatten(nested_list)
     return flattened_list
-
-def is_point_in_hull(point, hull):
-    hull_path = np.array(hull)
-    path = Path(hull_path)
-    return path.contains_point(point)
 
 def distance(point1, point2):
     return math.sqrt((point1[0] - point2[0])**2 + (point1[1] - point2[1])**2)
@@ -244,35 +156,7 @@ def dist_bateau_point(points, point_final, n):
             return True
     
     return False
-
-def plot_points(liste_parents_enfants, enveloppe_convexe, position_finale):
-    couleurs = plt.get_cmap('tab20')
-    for i, (parent, enfants) in enumerate(liste_parents_enfants):
-        couleur = couleurs(i / len(liste_parents_enfants))
-        plt.scatter(parent[0], parent[1], color=couleur, s=100, label=f'Parent {i+1}')
-        for enfant in enfants:
-            plt.scatter(enfant[0], enfant[1], color=couleur, s=50)
-            plt.plot([parent[0], enfant[0]], [parent[1], enfant[1]], color=couleur, linestyle='-', linewidth=1)
-
-    if len(enveloppe_convexe) > 0:
-        hull_x, hull_y = zip(*enveloppe_convexe)
-        plt.plot(hull_x + (hull_x[0],), hull_y + (hull_y[0],), 'r--', lw=2, label='Enveloppe Convexe')
-
-    plt.pause(0.5)
     
-def plot_point_live(ax, enveloppe_concave, couleur='blue'):
-    if not enveloppe_concave:  # Vérification que l'enveloppe n'est pas vide
-        return
-
-    # Tracer la ligne fermée de l'enveloppe concave
-    hull_x, hull_y = zip(*enveloppe_concave)
-    ax.plot(hull_x + (hull_x[0],), hull_y + (hull_y[0],), color=couleur, linestyle='-', linewidth=1, transform=ccrs.PlateCarree())
-
-    # Tracer les points de l'enveloppe concave
-    # ax.scatter(hull_x, hull_y, color='red', s=10, transform=ccrs.PlateCarree(), label='Envelope Points')
-
-    plt.pause(0.05)  # Pause pour actualiser l'affichage en live
-
 def plot_point_live2(ax, enveloppe_concave, parent_map, position_finale, step_index, loc, couleur='blue'):
     # Effacer uniquement les vecteurs de vent et les chemins, mais garder les enveloppes
     for artist in ax.collections:
@@ -372,7 +256,6 @@ def itere_jusqua_dans_enveloppe(position_initiale, position_finale, pas_temporel
         plt.legend()
         plt.tight_layout()
 
-    
     while True:
         print(f"Iteration {iter_count}:")
         print('Heure ', heure)
@@ -385,12 +268,12 @@ def itere_jusqua_dans_enveloppe(position_initiale, position_finale, pas_temporel
       
     
         enveloppe_concave = envconc.enveloppe_concave(np.array((points_aplatis)))
-        enveloppe_concave = elaguer_enveloppe(enveloppe_concave, 0.5)
+        enveloppe_concave = elaguer_enveloppe(enveloppe_concave, p.rayon_elemination)
         enveloppe_concave = [
             point for point in enveloppe_concave
             if not any(np.array_equal(point, precedent) for precedent in envconcave_precedent)
         ]
-        enveloppe_concave.append((position_initiale))
+        enveloppe_concave.append((position_initiale))   
         enveloppe_concave = sort_points_clockwise(enveloppe_concave)
         envconcave_precedent = enveloppe_concave
         
@@ -404,8 +287,6 @@ def itere_jusqua_dans_enveloppe(position_initiale, position_finale, pas_temporel
         if live:
             plot_point_live2(ax, enveloppe_concave, parent_map, position_finale, step_index=heure, loc=loc_nav)
                 
-        
-
         # Mettre à jour les positions pour la prochaine itération
         positions = enveloppe_concave
         print("le nombre de points est : ", len(positions))
@@ -435,11 +316,10 @@ def itere_jusqua_dans_enveloppe(position_initiale, position_finale, pas_temporel
             
             chemin_ideal.reverse()  # Inverser pour avoir le chemin de l'origine à la destination
             chemin_x, chemin_y = zip(*chemin_ideal)
-            
+            print(chemin_x, chemin_y)
             if not live:
-                pass
-                rv.plot_wind(loc_nav,chemin_x=chemin_x, chemin_y=chemin_y)
-            
+                rv.plot_grib(heure = heure,route={'x': chemin_x, 'y': chemin_y})
+
             if live:      
                 plt.plot(chemin_x, chemin_y, color='black', linestyle='-', linewidth=2, label='Chemin Idéal')
                 plt.scatter(chemin_x, chemin_y, color='black', s=50)
