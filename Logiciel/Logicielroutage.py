@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import math
+from time import time
 import matplotlib.pyplot as plt
 from matplotlib.path import Path
 
@@ -114,7 +115,7 @@ def recup_vitesse_fast(pol_v_vent, angle):
     if angle > 180:
         angle = 360 - angle
 
-    liste_angle = pol_v_vent.index
+    # liste_angle = pol_v_vent.index
 
     i = 0
     while i < len(pol_v_vent):
@@ -141,6 +142,19 @@ def flatten_list(nested_list):
             flattened_list.append(element)
     
     _flatten(nested_list)
+    return flattened_list
+
+def flatten_list_fast(nested_list):
+    flattened_list = []
+    stack = [nested_list]
+
+    while stack:
+        current = stack.pop()
+        if isinstance(current, list):  # Si c'est une liste, on ajoute ses éléments à la pile
+            stack.extend(current)
+        elif isinstance(current, tuple):  # Si c'est un tuple, on l'ajoute au résultat
+            flattened_list.append(current)
+    
     return flattened_list
 
 def distance(point1, point2):
@@ -257,49 +271,53 @@ def itere_jusqua_dans_enveloppe(position_initiale, position_finale, pas_temporel
         plt.tight_layout()
 
     while True:
-        print(f"Iteration {iter_count}:")
-        print('Heure ', heure)
+        start = time()
+
+        if p.print:    
+            print(f"Iteration {iter_count}:")
+            print('Heure ', heure)
 
         liste_parents_enfants = prochains_points_liste_parent_enfants(positions, temp, pas_angle, math.floor(heure), filtrer_par_distance=True)
-
+        
         heure += pas_temporel
-
-        points_aplatis = flatten_list(liste_parents_enfants)
-      
-    
+        
+        points_aplatis = flatten_list_fast(liste_parents_enfants)
         enveloppe_concave = envconc.enveloppe_concave(np.array((points_aplatis)))
         enveloppe_concave = elaguer_enveloppe(enveloppe_concave, p.rayon_elemination)
         enveloppe_concave = [
             point for point in enveloppe_concave
             if not any(np.array_equal(point, precedent) for precedent in envconcave_precedent)
         ]
-        enveloppe_concave.append((position_initiale))   
+        enveloppe_concave.append((position_initiale)) 
         enveloppe_concave = sort_points_clockwise(enveloppe_concave)
         envconcave_precedent = enveloppe_concave
         
-        print("Nombre de points dans enveloppe_concave:", len(enveloppe_concave), len(points_aplatis))
+        if p.print:
+            print("Nombre de points dans enveloppe_concave:", len(enveloppe_concave), len(points_aplatis))
 
         for parent, enfants in liste_parents_enfants:
             for enfant in enfants:
                 if enfant not in parent_map:
                     parent_map[enfant] = parent
 
+        
         if live:
             plot_point_live2(ax, enveloppe_concave, parent_map, position_finale, step_index=heure, loc=loc_nav)
                 
         # Mettre à jour les positions pour la prochaine itération
         positions = enveloppe_concave
-        print("le nombre de points est : ", len(positions))
-
+        if p.print:
+            print("le nombre de points est : ", len(positions))
+        
         if dist_bateau_point(positions, position_finale, p.tolerance):
-            print("validé")
             if temp >= 0.5:
                 temp *= 2/3
 
-
         closest_point = min(enveloppe_concave, key=lambda point: distance(point, position_finale))
-        print('distance arrivée, point_plus_proche ', distance(closest_point, position_finale))
+        if p.print:
+            print('distance arrivée, point_plus_proche ', distance(closest_point, position_finale))
 
+        
         if dist_bateau_point(positions, position_finale, tolerance):
             print("La position finale est maintenant dans l'enveloppe concave.")
             
@@ -316,7 +334,6 @@ def itere_jusqua_dans_enveloppe(position_initiale, position_finale, pas_temporel
             
             chemin_ideal.reverse()  # Inverser pour avoir le chemin de l'origine à la destination
             chemin_x, chemin_y = zip(*chemin_ideal)
-            print(chemin_x, chemin_y)
             if not live:
                 rv.plot_grib(heure = heure,route={'x': chemin_x, 'y': chemin_y})
 
@@ -329,6 +346,7 @@ def itere_jusqua_dans_enveloppe(position_initiale, position_finale, pas_temporel
             break        
         
         iter_count += 1
+        stop = time()
     
     if enregistrement:
         lien_dossier = "route_ideale" 
@@ -338,3 +356,4 @@ def itere_jusqua_dans_enveloppe(position_initiale, position_finale, pas_temporel
 
 #Avant dans la fonction polaire, mais je le sors pour le calculer une fois
 polaire_df = pd.read_csv(p.polaire, delimiter=p.delimeter, index_col=0)
+liste_angle = polaire_df.index

@@ -86,35 +86,6 @@ def get_outer_shell(points, filtered_triangles):
 
     return boundary_coords
 
-
-def generate_cardioid_points(radius, num_points, offset_x=0, offset_y=0):
-    t = np.linspace(0, 2*np.pi, num_points)
-    x = radius * (2 * np.cos(t) - np.cos(2 * t)) + offset_x
-    y = radius * (2 * np.sin(t) - np.sin(2 * t)) + offset_y
-    return x, y
-
-
-def generate_points():
-    # Parameters
-    radius = 1  # Radius of the cycloid
-    num_cardioid_points = 36  # Number of points on the main cycloid
-    num_sub_cardioid_points = 36  # Number of points on each sub-cycloid
-
-    main_cardioid = generate_cardioid_points(radius, num_cardioid_points)
-
-    # Initialize an empty list to store all sub-cardioid points
-    all_sub_cardioid_points = []
-
-    # Generate and plot sub-cardioids
-    for point in main_cardioid:
-        x_center, y_center = point
-        sub_cardioid = generate_cardioid_points(radius, num_sub_cardioid_points, x_center, y_center)
-        all_sub_cardioid_points.append(sub_cardioid)  # Store sub-cardioid points
-
-    # Convert list of arrays into a single Nx2 array
-    all_sub_cardioid_points = np.vstack(all_sub_cardioid_points)
-    return all_sub_cardioid_points
-
 def enveloppe_concave(points):
     # Delaunay triangulation
     tri = Delaunay(points)
@@ -125,12 +96,12 @@ def enveloppe_concave(points):
     while not stable:
         filtered_triangles = filter_triangles_on_edge(points, filtered_triangles)
         # outer_shell contiendra maintenant une liste de paires de coordonnées
-        outer_shell = get_outer_shell(points, filtered_triangles)
         triangle_new = len(filtered_triangles)
         if triangle_new == triangle:
             stable = True
         else:
             triangle = triangle_new
         # print(f"{len(filtered_triangles)} triangles conservés, {len(outer_shell)} arêtes en coquille extérieure.")
+        outer_shell = get_outer_shell(points, filtered_triangles)
 
     return outer_shell

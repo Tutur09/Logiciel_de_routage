@@ -145,10 +145,12 @@ def plot_wind2(ax, loc, step_indices=[1], chemin_x=None, chemin_y=None):
         )
 
         # Ajouter des vecteurs noirs pour la direction
-        q = ax.quiver(
-            longitudes[::p.skip], latitudes[::p.skip],
-            u10_specific[::p.skip, ::p.skip], v10_specific[::p.skip, ::p.skip],
-            color='black', scale=500, transform=ccrs.PlateCarree()
+        skip_vect_vent = 5
+        ax.barbs(
+            longitudes[::skip_vect_vent], latitudes[::skip_vect_vent],
+            1.852 * u10_specific[::skip_vect_vent, ::skip_vect_vent], 1.852 * v10_specific[::skip_vect_vent, ::skip_vect_vent],
+            length=5, pivot='middle', barbcolor='black', linewidth=0.6, 
+            transform=ccrs.PlateCarree()
         )
 
         # Ajouter une barre de couleur pour l'intensité
@@ -221,12 +223,14 @@ def plot_grib(heure, position=None, route=None, context=None):
     cbar.set_label("Vitesse du vent (nœuds)")
 
     # Ajouter les vecteurs de vent
-    skip_vect_vent = 6
-    ax.quiver(
+    skip_vect_vent = 10
+    ax.barbs(
         longitudes[::skip_vect_vent], latitudes[::skip_vect_vent],
-        u10_specific[::skip_vect_vent, ::skip_vect_vent], v10_specific[::skip_vect_vent, ::skip_vect_vent],
-        scale=500, transform=ccrs.PlateCarree()
+        1.852 * u10_specific[::skip_vect_vent, ::skip_vect_vent], 1.852 * v10_specific[::skip_vect_vent, ::skip_vect_vent],
+        length=5, pivot='middle', barbcolor='black', linewidth=0.6, 
+        transform=ccrs.PlateCarree()
     )
+    
 
     # Ajout de la route et de la position si contexte "enregistrement"
     if context == "enregistrement":
@@ -251,7 +255,6 @@ def plot_grib(heure, position=None, route=None, context=None):
     if context is None:
         plt.show()
 
-    
 def get_wind_at_position(lat, lon, time_step=0):
     try:
             
@@ -329,8 +332,7 @@ def enregistrement_route(chemin_x, chemin_y, pas_temporel, output_dir='./', skip
         plt.close()
         heure += pas_temporel
         point += 1
-
-        
+       
 def point_ini_fin(loc):
     points = []
 
@@ -423,6 +425,8 @@ if p.type == 'grib':
     #     pickle.dump(u10_values, f)
     # with open("v10_values.pkl", "wb") as f:
     #     pickle.dump(v10_values, f)
+    # plot_grib(40)
+
 
 else:
     u_xl, v_xl, lat_xl, lon_xl = excel_to_uv_components(p.excel_wind)
@@ -437,3 +441,5 @@ else:
 # Charger et simplifier les points centraux des polygones
 land_polygons = gpd.read_file(p.land)
 land_polygons_sindex = land_polygons.sindex
+
+plot_grib(24)

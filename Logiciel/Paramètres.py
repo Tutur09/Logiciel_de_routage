@@ -25,24 +25,25 @@ loc_nav = [bg[1], hd[1], bg[0], hd[0]]
 
 
 
-pas_temporel = 1
-pas_angle = 10
+pas_temporel = 0.5
+pas_angle = 5
 heure_debut = 13
 tolerance = 0.01
 rayon_elemination = 0.05
-skip = 4
+skip = 2
 land_contact = False 
-tolerance_arrivée = 0.3
+tolerance_arrivée = 0.5
 
 enregistrement = False
 live = True
+print = True
 
 
 drapeau = True
 
 # FICHIER METEO, TERRE
 land = r'Logiciel\Carte_frontières_terrestre\ne_10m_land.shp'
-vent = r'Logiciel\Données_vent\METEOCONSULT00Z_VENT_1110_Gascogne_départ_vendée.grb'
+vent = r'Logiciel\Données_vent\METEOCONSULT18Z_VENT_1206_Gascogne_TEMPETE.grb'
 excel_wind = r'Logiciel\Données_vent\Vent.xlsx'
 
 type = 'grib'
