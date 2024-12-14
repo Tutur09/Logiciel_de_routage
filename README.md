@@ -25,8 +25,8 @@ J'ai partagé une environnement conda avec toutes les bibliothèques nécessaire
 - **Amélioration de l'Enregistrement** : Les plots sont maintenant sauvegardés dans un répertoire spécifié, avec des noms de fichiers indiquant l'heure.
 
 ### Novembre-décembre finalisation du logiciel pour le TIPE
-- ** Possibilités de déterminer la route idéal avec un aperçu en direct ou visualisation a la fin de la route
-- ** Grille de vent venant d'un grib meteo France ou carte des vents personnalisée via excel
+- Possibilités de déterminer la route idéal avec un aperçu en direct ou visualisation a la fin de la route
+- Grille de vent venant d'un grib meteo France ou carte des vents personnalisée via excel
 
 ## Utilisation
 Me demander et pas évident d'installer cfgrib 
