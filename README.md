@@ -40,4 +40,4 @@ _Récupération du vent en temps réel grâçe aux fichiers GRIB de Météo Mari
 
 ![](https://github.com/Tutur09/Logiciel_de_routage/raw/main/route_ideale/route_ideale_vent_heure_42.png)
 
-(https://github.com/Tutur09/Logiciel_de_routage/raw/main/Carte_vents.png)
+![Exemple de plot d'un fichier grib dans le golf de Gascogne](https://github.com/Tutur09/Logiciel_de_routage/raw/main/Carte_vents.png)
